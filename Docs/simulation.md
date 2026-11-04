@@ -7,7 +7,7 @@ lives in two MonoGame-free projects:
 
 - **`CIS580.Core`** (`CIS580.Simulation` namespace): the machinery that runs any simulation,
   including the fixed-tick runner, commands, actions, events, and random numbers.
-- **`GameArchitecture.Simulation`**: *this* game's world and rules. It contains placeholders for
+- **`SpiderManEndless.Simulation`**: *this* game's world and rules. It contains placeholders for
   you to replace.
 
 ## Why a separate simulation?
@@ -51,7 +51,7 @@ public struct PlayerCommand
 
 [`ActionSet`](../CIS580/CIS580.Core/Simulation/ActionSet.cs) stores held actions as bits in a
 `uint`. Each game defines its actions as an enum whose values (0–31) are bit indices.
-This game's actions are in [`GameAction`](../GameArchitecture.Simulation/GameAction.cs):
+This game's actions are in [`GameAction`](../SpiderManEndless.Simulation/GameAction.cs):
 
 ```csharp
 public enum GameAction
@@ -144,7 +144,7 @@ The simulation reports what happened by raising events on an
 views, audio, and feedback subscribe to.
 
 This game's events are records deriving from
-[`GameEvent`](../GameArchitecture.Simulation/GameEvents.cs):
+[`GameEvent`](../SpiderManEndless.Simulation/GameEvents.cs):
 
 ```csharp
 public abstract record GameEvent(long Tick);
@@ -173,12 +173,12 @@ The world owns one generator (`World.Random`), seeded from the session's seed.
 
 | Type | Role |
 |---|---|
-| [`GameSession`](../GameArchitecture.Simulation/GameSession.cs) | Implements `ISimulation`. Owns the `World` and the `Events` queue. Applies each player's input, then updates everything else. |
-| [`World`](../GameArchitecture.Simulation/World.cs) | Everything that exists: player avatars (in join order), the wanderer, and the random generator. Measured in **world units** (800 × 480), not pixels. |
-| [`PlayerAvatar`](../GameArchitecture.Simulation/PlayerAvatar.cs) | *Placeholder.* A position that moves at `Speed` in the direction of `Move`. |
-| [`Wanderer`](../GameArchitecture.Simulation/Wanderer.cs) | *Placeholder.* Jitters randomly around a home point, using `World.Random`. |
-| [`GameAction`](../GameArchitecture.Simulation/GameAction.cs) | *Placeholder.* The game's actions. |
-| [`GameEvents`](../GameArchitecture.Simulation/GameEvents.cs) | The events the simulation raises. |
+| [`GameSession`](../SpiderManEndless.Simulation/GameSession.cs) | Implements `ISimulation`. Owns the `World` and the `Events` queue. Applies each player's input, then updates everything else. |
+| [`World`](../SpiderManEndless.Simulation/World.cs) | Everything that exists: player avatars (in join order), the wanderer, and the random generator. Measured in **world units** (800 × 480), not pixels. |
+| [`PlayerAvatar`](../SpiderManEndless.Simulation/PlayerAvatar.cs) | *Placeholder.* A position that moves at `Speed` in the direction of `Move`. |
+| [`Wanderer`](../SpiderManEndless.Simulation/Wanderer.cs) | *Placeholder.* Jitters randomly around a home point, using `World.Random`. |
+| [`GameAction`](../SpiderManEndless.Simulation/GameAction.cs) | *Placeholder.* The game's actions. |
+| [`GameEvents`](../SpiderManEndless.Simulation/GameEvents.cs) | The events the simulation raises. |
 
 `World.AddPlayer` and `World.RemovePlayer` are `internal`: only the session can change who is in
 the world. Views get read-only access (`IReadOnlyList<PlayerAvatar> Players`, `FindPlayer`).
@@ -215,7 +215,7 @@ To record a replay, save that seed along with every tick's commands.
 
 ### Add an entity
 
-1. Create a class in `GameArchitecture.Simulation` with public getters and private or internal
+1. Create a class in `SpiderManEndless.Simulation` with public getters and private or internal
    setters, plus an update method that takes `float deltaSeconds` (and the `World`, if it needs
    the random generator or other entities).
 2. Store instances in a `List<T>` in `World`, exposed as `IReadOnlyList<T>`.

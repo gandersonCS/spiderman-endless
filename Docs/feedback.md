@@ -8,7 +8,7 @@ a few frames when a big blow lands. None of it changes the rules, so like audio 
 in the client and responds to simulation events.
 
 The library code is in `CIS580.MonoGame/Feedback/`. The game decides when to use it in
-[`GameArchitecture/Feedback/GameFeedback.cs`](../GameArchitecture/Feedback/GameFeedback.cs).
+[`SpiderManEndless/Feedback/GameFeedback.cs`](../SpiderManEndless/Feedback/GameFeedback.cs).
 
 ## `ScreenShake`
 
@@ -83,7 +83,7 @@ one wins. Typical durations are 50–150 ms.
 
 ## `GameFeedback`: the game's feel, in one place
 
-[`GameFeedback`](../GameArchitecture/Feedback/GameFeedback.cs) turns simulation events into
+[`GameFeedback`](../SpiderManEndless/Feedback/GameFeedback.cs) turns simulation events into
 shake, rumble, and hit-stop, the same way `GameAudio` turns them into sound. `InGameState`
 creates it in `Enter()` with the local players, the world view, and its `Rumble` and `HitStop`,
 then subscribes it to `GameEventRaised`.

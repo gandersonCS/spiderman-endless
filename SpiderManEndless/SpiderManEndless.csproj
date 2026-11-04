@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Spider-Man Endless: the DesktopGL game client (states, UI, views, audio for this game).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RollForward>Major</RollForward>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <TieredCompilation>false</TieredCompilation>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>spideyicon.ico</ApplicationIcon>
+    <AssemblyName>SpiderManEndless</AssemblyName>
+    <RootNamespace>SpiderManEndless</RootNamespace>
+    <AssemblyTitle>Spider-Man Endless</AssemblyTitle>
+    <Product>Spider-Man Endless</Product>
+
+    <MonoGamePlatform>DesktopGL</MonoGamePlatform>
+    <ContentBuilderProject>..\SpiderManEndless.Content\SpiderManEndless.Content.csproj</ContentBuilderProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The icon: spideyicon.ico is the .exe's icon (above) and is also embedded as "Icon.ico" /
+         "Icon.bmp", the names MonoGame looks for to set the window's icon -->
+    <None Remove="spideyicon.ico" />
+    <None Remove="Icon.bmp" />
+    <EmbeddedResource Include="spideyicon.ico" LogicalName="Icon.ico" />
+    <EmbeddedResource Include="Icon.bmp" LogicalName="Icon.bmp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CIS580\CIS580.Core\CIS580.Core.csproj" />
+    <ProjectReference Include="..\CIS580\CIS580.MonoGame\CIS580.MonoGame.csproj" />
+    <ProjectReference Include="..\SpiderManEndless.Simulation\SpiderManEndless.Simulation.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.DesktopGL" />
+  </ItemGroup>
+  <Import Project="..\CIS580\Build\CIS580.Content.targets" />
+</Project>

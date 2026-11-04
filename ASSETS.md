@@ -1,7 +1,7 @@
 # Assets & Credits
 
 Everything in this project that I didn't make myself, where it came from, and what license it's under.
-Content files live in `GameArchitecture.Content/Assets/`.
+Content files live in `SpiderManEndless.Content/Assets/`.
 
 This is a fan project made for a university class (CIS 580, Kansas State University). Spider-Man and
 all related characters belong to Marvel. It's not for sale and isn't meant to be published.
@@ -87,5 +87,5 @@ loops (procedurally generated, public domain). They still get built but the game
 
 ## Application icon
 
-- `GameArchitecture/Icon.ico` and `GameArchitecture/Icon.bmp` - the default icons from the MonoGame
+- `SpiderManEndless/Icon.ico` and `SpiderManEndless/Icon.bmp` - the default icons from the MonoGame
   project templates (<https://monogame.net>), Microsoft Public License (Ms-PL).

@@ -2,7 +2,7 @@
 
 [← Overview](README.md)
 
-Game assets (fonts, textures, sounds, music) live in `GameArchitecture.Content/Assets/` and are
+Game assets (fonts, textures, sounds, music) live in `SpiderManEndless.Content/Assets/` and are
 built into MonoGame's `.xnb` format by a **Content Builder project**. This is MonoGame 3.8.5+'s
 code-based replacement for the older `.mgcb` file and MGCB Editor. You won't find a `.mgcb`
 file in this project; rules for building content are written in C#.
@@ -10,7 +10,7 @@ file in this project; rules for building content are written in C#.
 ## How it works
 
 ```
-GameArchitecture.Content/
+SpiderManEndless.Content/
   Builder.cs           which assets are built, and how
   Assets/
     Fonts/             menufont.spritefont, gamefont.spritefont, LiberationSans-Regular.ttf
@@ -22,17 +22,17 @@ GameArchitecture.Content/
 1. Building the game project runs the `BuildContent` target from
    [`CIS580/Build/CIS580.Content.targets`](../CIS580/Build/CIS580.Content.targets) before
    compiling.
-2. That target builds `GameArchitecture.Content` (a small console program) and runs it with the
+2. That target builds `SpiderManEndless.Content` (a small console program) and runs it with the
    platform (`DesktopGL`), the `Assets` folder, and the game's output folder.
-3. The builder builds whatever [`Builder.cs`](../GameArchitecture.Content/Builder.cs) includes,
+3. The builder builds whatever [`Builder.cs`](../SpiderManEndless.Content/Builder.cs) includes,
    writing `.xnb` files to the game's output `Content/` folder. Only changed assets are rebuilt.
 
 The game project opts in with two properties and an import (already set up in
-`GameArchitecture.csproj`):
+`SpiderManEndless.csproj`):
 
 ```xml
 <MonoGamePlatform>DesktopGL</MonoGamePlatform>
-<ContentBuilderProject>..\GameArchitecture.Content\GameArchitecture.Content.csproj</ContentBuilderProject>
+<ContentBuilderProject>..\SpiderManEndless.Content\SpiderManEndless.Content.csproj</ContentBuilderProject>
 ...
 <Import Project="..\CIS580\Build\CIS580.Content.targets" />
 ```
@@ -115,7 +115,7 @@ seamless, and keep them reasonably short, since WAV files are large.
 ## Placeholders
 
 Every texture and sound in the project is a procedurally generated placeholder (see
-`ASSETS.md` and [`Assets/Audio/README.md`](../GameArchitecture.Content/Assets/Audio/README.md)).
+`ASSETS.md` and [`Assets/Audio/README.md`](../SpiderManEndless.Content/Assets/Audio/README.md)).
 Replace them with your own, keeping the same names to avoid changing code. Update `ASSETS.md`
 when you do.
 
@@ -131,6 +131,6 @@ problems.
 ## Debugging the builder
 
 The builder is an ordinary console program. Running it with no arguments
-(`dotnet run --project GameArchitecture.Content`) builds `Assets/` with default settings for
+(`dotnet run --project SpiderManEndless.Content`) builds `Assets/` with default settings for
 DesktopGL, which is handy for seeing the full error output for an asset that won't build.
 Content build errors appear in the game's build output as lines starting with `[E]`.

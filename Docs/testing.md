@@ -7,12 +7,12 @@ The solution has two xUnit v3 test projects:
 | Project | Tests |
 |---|---|
 | [`Tests/CIS580.Tests`](../Tests/CIS580.Tests) | The library: simulation runner, random numbers, input (bindings, schemes, sources, menus, lobby, rebinding, JSON), UI (layer stack, menus, transitions), flow, views, audio, feedback, settings |
-| [`Tests/GameArchitecture.Tests`](../Tests/GameArchitecture.Tests) | The game: the simulation's behavior and determinism, and the architecture rules |
+| [`Tests/SpiderManEndless.Tests`](../Tests/SpiderManEndless.Tests) | The game: the simulation's behavior and determinism, and the architecture rules |
 
 Run them all with:
 
 ```sh
-dotnet test GameArchitecture.slnx
+dotnet test SpiderManEndless.slnx
 ```
 
 Or use your editor's test explorer. Shared test settings (xUnit packages, `using Xunit`) are in
@@ -21,8 +21,8 @@ its project references.
 
 ## The architecture test
 
-[`ArchitectureTests`](../Tests/GameArchitecture.Tests/ArchitectureTests.cs) checks that
-`CIS580.Core` and `GameArchitecture.Simulation` don't reference MonoGame. If it fails, something
+[`ArchitectureTests`](../Tests/SpiderManEndless.Tests/ArchitectureTests.cs) checks that
+`CIS580.Core` and `SpiderManEndless.Simulation` don't reference MonoGame. If it fails, something
 in the simulation is using a MonoGame type (often `Microsoft.Xna.Framework.Vector2` instead of
 `System.Numerics.Vector2`, or `MathHelper`). Move that code to the client, or replace the type.
 
@@ -34,7 +34,7 @@ part to test. Drive it with scripted players and `runner.Step()`:
 ```csharp
 using System.Numerics;
 using CIS580.Simulation;
-using GameArchitecture.Simulation;
+using SpiderManEndless.Simulation;
 
 public class MovementTests
 {
@@ -62,7 +62,7 @@ public class MovementTests
 "press Primary on tick 10", "walk in a circle", "do nothing". To check events, read
 `session.Events.Pending` after a step.
 
-**Keep the determinism test passing.** [`GameSessionTests.SameSeedAndCommands_PlayOutIdentically`](../Tests/GameArchitecture.Tests/GameSessionTests.cs)
+**Keep the determinism test passing.** [`GameSessionTests.SameSeedAndCommands_PlayOutIdentically`](../Tests/SpiderManEndless.Tests/GameSessionTests.cs)
 runs two sessions with the same seed and scripted commands and checks they match. When you add
 state to the world (scores, enemies, coins), add it to that test's assertions, so a determinism
 mistake is caught right away rather than when you try networking.

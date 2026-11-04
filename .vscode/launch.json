@@ -5,10 +5,10 @@
     "version": "0.2.0",
     "configurations": [
       {
-        "name": "C#: GameArchitecture Debug",
+        "name": "C#: SpiderManEndless Debug",
         "type": "dotnet",
         "request": "launch",
-        "projectPath": "${workspaceFolder}/GameArchitecture/GameArchitecture.csproj"
+        "projectPath": "${workspaceFolder}/SpiderManEndless/SpiderManEndless.csproj"
       }
     ],
   }

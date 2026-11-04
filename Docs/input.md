@@ -10,7 +10,7 @@ The input system turns physical devices into two kinds of output:
 
 It supports rebinding, inverted axes, dead zones, a single player switching between keyboard and
 gamepad, and two players sharing one keyboard. All of it is in `CIS580.MonoGame/Input/`, except
-two game-specific classes in `GameArchitecture/Input/`.
+two game-specific classes in `SpiderManEndless/Input/`.
 
 ## How the pieces fit
 
@@ -114,7 +114,7 @@ var scheme = new ControlScheme("Keyboard")
 
 [`StandardSchemes`](../CIS580/CIS580.MonoGame/Input/StandardSchemes.cs) provides four defaults
 for the standard controls: `Keyboard()`, `KeyboardLeft()`, `KeyboardRight()`, and `GamePad()`.
-The game's [`DefaultControls`](../GameArchitecture/Input/DefaultControls.cs) starts from each of
+The game's [`DefaultControls`](../SpiderManEndless/Input/DefaultControls.cs) starts from each of
 these and adds bindings for the game's own actions.
 
 Menu controls and movement deliberately share keys (WASD moves the player *and* the menu
@@ -134,7 +134,7 @@ in progress, and in on-screen hints.
 Because only *changes* are saved, a binding you add to `DefaultControls` in a later version still
 reaches players who already have saved controls.
 
-The game's [`GameControls`](../GameArchitecture/Input/GameControls.cs) wraps the `ControlSet`
+The game's [`GameControls`](../SpiderManEndless/Input/GameControls.cs) wraps the `ControlSet`
 and is registered as a service. It gives the schemes names (`Keyboard`, `KeyboardLeft`,
 `KeyboardRight`, `GamePad`) and builds the input sources the states need:
 
@@ -230,12 +230,12 @@ candidate sources (`GameControls.LobbyCandidates()`):
 - **cancel** un-readies; cancel again leaves
 
 `CanStart` is true when at least `MinPlayers` (2) have joined and everyone is ready. The lobby
-only tracks seats. [`LobbyState`](../GameArchitecture/States/LobbyState.cs) runs the countdown
-and starts the game, and [`LobbyLayer`](../GameArchitecture/UI/LobbyLayer.cs) draws it.
+only tracks seats. [`LobbyState`](../SpiderManEndless/States/LobbyState.cs) runs the countdown
+and starts the game, and [`LobbyLayer`](../SpiderManEndless/UI/LobbyLayer.cs) draws it.
 
 ## Rebinding
 
-The Controls screen ([`ControlsLayer`](../GameArchitecture/UI/ControlsLayer.cs)) lists the
+The Controls screen ([`ControlsLayer`](../SpiderManEndless/UI/ControlsLayer.cs)) lists the
 `GameControls.Rebindable` controls for a chosen scheme. Choosing one opens a
 [`BindingCaptureLayer`](../CIS580/CIS580.MonoGame/UI/BindingCaptureLayer.cs), which uses
 [`BindingCapture.TryCapture`](../CIS580/CIS580.MonoGame/Input/BindingCapture.cs) to find the
@@ -255,12 +255,12 @@ Design decisions you may want to revisit:
 
 ### Adding a game action
 
-1. Add a value to [`GameAction`](../GameArchitecture.Simulation/GameAction.cs) (0–31):
+1. Add a value to [`GameAction`](../SpiderManEndless.Simulation/GameAction.cs) (0–31):
    ```csharp
    public enum GameAction { Primary = 0, Secondary = 1, Jump = 2 }
    ```
 2. Give it default bindings in **every** scheme in
-   [`DefaultControls`](../GameArchitecture/Input/DefaultControls.cs):
+   [`DefaultControls`](../SpiderManEndless/Input/DefaultControls.cs):
    ```csharp
    public static ControlScheme Keyboard() => StandardSchemes.Keyboard()
        // ...existing actions...

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Tests for this game's simulation. Add tests for your own game rules here. -->
+  <PropertyGroup>
+    <RootNamespace>SpiderManEndless.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\CIS580\CIS580.Core\CIS580.Core.csproj" />
+    <ProjectReference Include="..\..\SpiderManEndless.Simulation\SpiderManEndless.Simulation.csproj" />
+  </ItemGroup>
+</Project>

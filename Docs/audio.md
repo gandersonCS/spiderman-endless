@@ -5,8 +5,8 @@
 The audio system plays sound effects and music, with separate player-adjustable volumes, music
 that cross-fades between tracks, and sounds that vary a little each time so repetition isn't
 tiring. The library code is in `CIS580.MonoGame/Audio/`. The game's sounds are in
-[`GameArchitecture/Audio/GameAudio.cs`](../GameArchitecture/Audio/GameAudio.cs) and
-[`GameArchitecture/UI/GameTheme.cs`](../GameArchitecture/UI/GameTheme.cs).
+[`SpiderManEndless/Audio/GameAudio.cs`](../SpiderManEndless/Audio/GameAudio.cs) and
+[`SpiderManEndless/UI/GameTheme.cs`](../SpiderManEndless/UI/GameTheme.cs).
 
 The key rule: **the simulation never plays sounds.** It raises [events](simulation.md#eventqueuetevent),
 and the client decides what they sound like. Sound randomness (which variation, what pitch) uses
@@ -115,7 +115,7 @@ Leave a cue `null` for silence. Your own layers can play these too:
 
 ## This game's audio
 
-[`GameAudio`](../GameArchitecture/Audio/GameAudio.cs) is registered as a service in
+[`GameAudio`](../SpiderManEndless/Audio/GameAudio.cs) is registered as a service in
 `LoadContent`. It:
 
 - loads the menu and game music, and offers `PlayMenuMusic()` / `PlayGameMusic()`, called by
@@ -140,7 +140,7 @@ nothing carries over into the menus.
 
 ### A sound for a new event
 
-1. Add the `.wav` to `GameArchitecture.Content/Assets/Audio/Sfx/` and list it in
+1. Add the `.wav` to `SpiderManEndless.Content/Assets/Audio/Sfx/` and list it in
    [`ASSETS.md`](../ASSETS.md).
 2. Create a cue in the `GameAudio` constructor:
    ```csharp

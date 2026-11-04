@@ -1,4 +1,4 @@
-# GameArchitecture
+# SpiderManEndless
 
 A starter project for MonoGame games, written for CIS580. It provides the parts every game needs:
 menus, rebindable input (including gamepads and shared keyboards), a local multiplayer lobby,
@@ -10,10 +10,10 @@ Built on MonoGame 3.8.6 (DesktopGL) and .NET 9.
 ## Quick start
 
 ```sh
-dotnet build GameArchitecture.slnx                   # build everything, including content
-dotnet run --project GameArchitecture                # run the game
-dotnet run --project GameArchitecture -- --play      # skip the menus and start playing
-dotnet test GameArchitecture.slnx                    # run the tests
+dotnet build SpiderManEndless.slnx                   # build everything, including content
+dotnet run --project SpiderManEndless                # run the game
+dotnet run --project SpiderManEndless -- --play      # skip the menus and start playing
+dotnet test SpiderManEndless.slnx                    # run the tests
 ```
 
 ## Documentation

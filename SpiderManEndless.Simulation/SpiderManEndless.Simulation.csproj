@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    SpiderManEndless.Simulation: this game's rules and world state.
+    Like CIS580.Core, it must NOT reference MonoGame, so that the same simulation can run
+    in the game client and in a headless server.
+  -->
+  <PropertyGroup>
+    <AssemblyName>SpiderManEndless.Simulation</AssemblyName>
+    <RootNamespace>SpiderManEndless.Simulation</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CIS580\CIS580.Core\CIS580.Core.csproj" />
+  </ItemGroup>
+</Project>

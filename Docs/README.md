@@ -1,6 +1,6 @@
-# GameArchitecture Documentation
+# SpiderManEndless Documentation
 
-GameArchitecture is a starter project for MonoGame games, written for CIS580. It gives you the
+SpiderManEndless is a starter project for MonoGame games, written for CIS580. It gives you the
 parts every game needs but nobody wants to rewrite each time:
 
 - menus with transitions, prompts, and an options screen
@@ -40,25 +40,25 @@ If you only read two pages, read this one and the [walkthrough](walkthrough.md).
 
 ## The projects
 
-The solution (`GameArchitecture.slnx`) is split into a reusable **library** and a **game** that
+The solution (`SpiderManEndless.slnx`) is split into a reusable **library** and a **game** that
 uses it.
 
 | Project | Namespaces | Uses MonoGame? | Contains |
 |---|---|---|---|
 | `CIS580/CIS580.Core` | `CIS580.Simulation`, `CIS580.Settings` | **No** | The simulation runner, commands, deterministic random numbers, the settings store |
 | `CIS580/CIS580.MonoGame` | `CIS580.Input`, `CIS580.UI`, `CIS580.Flow`, `CIS580.Views`, `CIS580.Audio`, `CIS580.Feedback` | Yes (platform-neutral) | Everything that needs MonoGame but isn't specific to one game |
-| `GameArchitecture.Simulation` | `GameArchitecture.Simulation` | **No** | *This game's* rules and world |
-| `GameArchitecture` | `GameArchitecture.*` | Yes (DesktopGL) | *This game's* client: states, menus, views, audio, settings |
-| `GameArchitecture.Content` | — | Content pipeline | Builds `Assets/` into `.xnb` content |
+| `SpiderManEndless.Simulation` | `SpiderManEndless.Simulation` | **No** | *This game's* rules and world |
+| `SpiderManEndless` | `SpiderManEndless.*` | Yes (DesktopGL) | *This game's* client: states, menus, views, audio, settings |
+| `SpiderManEndless.Content` | — | Content pipeline | Builds `Assets/` into `.xnb` content |
 | `Tests/CIS580.Tests` | | | Tests for the library |
-| `Tests/GameArchitecture.Tests` | | | Tests for the game, including architecture rules |
+| `Tests/SpiderManEndless.Tests` | | | Tests for the game, including architecture rules |
 
 ```
-                    GameArchitecture  (the game client, DesktopGL)
+                    SpiderManEndless  (the game client, DesktopGL)
                    /        |         \
                   /         |          \ runs at build time
                  v          v           v
-     CIS580.MonoGame   GameArchitecture.Simulation   GameArchitecture.Content
+     CIS580.MonoGame   SpiderManEndless.Simulation   SpiderManEndless.Content
                  \          |
                   v         v
                    CIS580.Core
@@ -67,12 +67,12 @@ uses it.
 Two rules hold this structure together:
 
 1. **Library code is game-agnostic.** Anything in `CIS580/` must work for *any* game. Code that
-   knows about *this* game (its actions, its menus, its sounds) lives in the `GameArchitecture*`
+   knows about *this* game (its actions, its menus, its sounds) lives in the `SpiderManEndless*`
    projects. When you extend the project, almost everything you write goes in the game projects.
    Move code into the library only when you would reuse it in another game.
-2. **The simulation never touches MonoGame.** `CIS580.Core` and `GameArchitecture.Simulation`
+2. **The simulation never touches MonoGame.** `CIS580.Core` and `SpiderManEndless.Simulation`
    must be able to run inside a headless server, where there is no window, graphics, audio,
-   or input. A unit test ([`ArchitectureTests`](../Tests/GameArchitecture.Tests/ArchitectureTests.cs))
+   or input. A unit test ([`ArchitectureTests`](../Tests/SpiderManEndless.Tests/ArchitectureTests.cs))
    fails the build if either one references MonoGame.
 
 ## The big picture
@@ -129,7 +129,7 @@ AI, a replay, or a network connection.
 
 ## One frame
 
-[`GameArchitectureExampleGame`](../GameArchitecture/GameArchitectureExampleGame.cs) is kept
+[`SpiderManEndlessExampleGame`](../SpiderManEndless/SpiderManEndlessExampleGame.cs) is kept
 deliberately small. Each frame it:
 
 1. reads the input devices (`InputState.Update`, then `UiInput.Update` for menu navigation)
@@ -179,8 +179,8 @@ CIS580/
     Audio/           AudioManager, AudioBus, SoundCue, MusicPlayer, UiSoundSet
     Feedback/        ScreenShake, Rumble, HitStop
   Build/             CIS580.Content.targets (runs the content builder)
-GameArchitecture.Simulation/   GameSession, World, PlayerAvatar, Wanderer, GameAction, GameEvents
-GameArchitecture/
+SpiderManEndless.Simulation/   GameSession, World, PlayerAvatar, Wanderer, GameAction, GameEvents
+SpiderManEndless/
   States/            MainMenuState, LobbyState, InGameState, PausedState
   UI/                GameTheme, BackgroundLayer, MainMenuLayer, OptionsLayer, ControlsLayer, PauseLayer, LobbyLayer
   Views/             WorldView, HudLayer, PlayerColors
@@ -188,7 +188,7 @@ GameArchitecture/
   Audio/             GameAudio
   Feedback/          GameFeedback
   Settings/          GameSettings, UserSettings
-GameArchitecture.Content/
+SpiderManEndless.Content/
   Builder.cs         which assets are built, and how
   Assets/            Fonts/, Textures/, Audio/
 Tests/
@@ -198,7 +198,7 @@ ASSETS.md            provenance and license of every asset
 ## Conventions
 
 - **Library vs. game.** Library types are in `CIS580.*` namespaces under `CIS580/`. Game types
-  are in `GameArchitecture.*` at the top level.
+  are in `SpiderManEndless.*` at the top level.
 - **Comments.** Public members have XML doc comments that explain *why* as well as *what*. The
   source is the most detailed reference; these pages explain how the pieces fit together.
 - **Policy belongs to the game.** Choices that differ between games, such as who can pause,

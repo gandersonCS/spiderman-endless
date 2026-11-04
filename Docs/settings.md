@@ -6,7 +6,7 @@ Players' settings (difficulty, volumes, vibration), input preferences (invert Y)
 controls are loaded when the game starts and saved when they change. The library part is
 [`SettingsStore`](../CIS580/CIS580.Core/Settings/SettingsStore.cs) in `CIS580.Core`, which
 doesn't use MonoGame, so a server could use it too. The game's part is in
-`GameArchitecture/Settings/`.
+`SpiderManEndless/Settings/`.
 
 ## `SettingsStore`
 
@@ -14,7 +14,7 @@ A `SettingsStore` saves and loads objects as JSON files in one folder, one file 
 setting:
 
 ```csharp
-var store = new SettingsStore(SettingsStore.DefaultDirectory("GameArchitecture"));
+var store = new SettingsStore(SettingsStore.DefaultDirectory("SpiderManEndless"));
 
 var settings = store.Load("settings.json", () => new GameSettings());   // the defaults if missing
 store.Save("settings.json", settings);
@@ -42,12 +42,12 @@ The JSON is human-readable: indented, with camelCase property names and enums wr
 
 ## The game's settings
 
-[`UserSettings`](../GameArchitecture/Settings/UserSettings.cs) gathers everything the player can
+[`UserSettings`](../SpiderManEndless/Settings/UserSettings.cs) gathers everything the player can
 set up, in three files. A problem with one file doesn't lose the others:
 
 | File | Contents | Type |
 |---|---|---|
-| `settings.json` | Difficulty, player color, sound, volumes, vibration | [`GameSettings`](../GameArchitecture/Settings/GameSettings.cs) |
+| `settings.json` | Difficulty, player color, sound, volumes, vibration | [`GameSettings`](../SpiderManEndless/Settings/GameSettings.cs) |
 | `input.json` | Invert move/look Y, dead zone | `InputProfile` |
 | `controls.json` | **Only the controls the player changed** (deleted when there are none) | `List<ControlScheme>` from `ControlSet.GetChanges()` |
 
@@ -99,7 +99,7 @@ can edit (an enum, a list of choices, a toggle, a number). Replace them with you
    ```csharp
    public bool ShowTimer { get; set; } = true;
    ```
-2. Add an item for it to [`OptionsLayer.Load`](../GameArchitecture/UI/OptionsLayer.cs):
+2. Add an item for it to [`OptionsLayer.Load`](../SpiderManEndless/UI/OptionsLayer.cs):
    ```csharp
    .Add(new ToggleItem("Show timer", () => settings.ShowTimer, value => settings.ShowTimer = value))
    ```

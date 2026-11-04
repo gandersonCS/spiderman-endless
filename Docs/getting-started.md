@@ -17,10 +17,10 @@ and the versions are pinned in [`Directory.Packages.props`](../Directory.Package
 From the repository root:
 
 ```sh
-dotnet build GameArchitecture.slnx                      # build everything, including content
-dotnet run --project GameArchitecture                   # run the game
-dotnet run --project GameArchitecture -- --play         # skip the menus and start playing
-dotnet test GameArchitecture.slnx                       # run all the tests
+dotnet build SpiderManEndless.slnx                      # build everything, including content
+dotnet run --project SpiderManEndless                   # run the game
+dotnet run --project SpiderManEndless -- --play         # skip the menus and start playing
+dotnet test SpiderManEndless.slnx                       # run all the tests
 ```
 
 The first build takes longer, because NuGet restores the content pipeline tools and the content
@@ -61,7 +61,7 @@ to try out gameplay changes.
 A single player can switch freely between the keyboard and their gamepad. The two keyboard
 halves are used only when two people share the keyboard in local multiplayer. These defaults are
 defined in [`StandardSchemes`](../CIS580/CIS580.MonoGame/Input/StandardSchemes.cs) (movement,
-menus, pause) and [`DefaultControls`](../GameArchitecture/Input/DefaultControls.cs) (this game's
+menus, pause) and [`DefaultControls`](../SpiderManEndless/Input/DefaultControls.cs) (this game's
 actions). See [Input](input.md).
 
 ## Debug output
@@ -69,7 +69,7 @@ actions). See [Input](input.md).
 Debug builds print to the console:
 
 ```
-[Settings] /Users/you/Library/Application Support/GameArchitecture
+[Settings] /Users/you/Library/Application Support/SpiderManEndless
 [AppFlow] Change to MainMenuState
 [AppFlow] Change to LoadingState
 [AppFlow] Change to InGameState
@@ -81,27 +81,27 @@ transition misbehaves. See [App Flow](flow.md).
 
 ## Where settings are saved
 
-Settings, input preferences, and rebound controls are saved as JSON in a `GameArchitecture`
+Settings, input preferences, and rebound controls are saved as JSON in a `SpiderManEndless`
 folder inside the user's local application data folder:
 
 | OS | Folder |
 |---|---|
-| Windows | `%LOCALAPPDATA%\GameArchitecture` |
-| macOS | `~/Library/Application Support/GameArchitecture` |
-| Linux | `~/.local/share/GameArchitecture` |
+| Windows | `%LOCALAPPDATA%\SpiderManEndless` |
+| macOS | `~/Library/Application Support/SpiderManEndless` |
+| Linux | `~/.local/share/SpiderManEndless` |
 
 Delete the folder to go back to the defaults. See [Settings](settings.md).
 
 ## Where to start reading code
 
-1. [`GameArchitectureExampleGame.cs`](../GameArchitecture/GameArchitectureExampleGame.cs): the
+1. [`SpiderManEndlessExampleGame.cs`](../SpiderManEndless/SpiderManEndlessExampleGame.cs): the
    whole frame loop and every shared service, in about 120 lines.
-2. [`InGameState.cs`](../GameArchitecture/States/InGameState.cs): how a game in progress is wired
+2. [`InGameState.cs`](../SpiderManEndless/States/InGameState.cs): how a game in progress is wired
    together (simulation, players, views, audio, feedback).
-3. [`GameSession.cs`](../GameArchitecture.Simulation/GameSession.cs) and
-   [`World.cs`](../GameArchitecture.Simulation/World.cs): the placeholder simulation you will
+3. [`GameSession.cs`](../SpiderManEndless.Simulation/GameSession.cs) and
+   [`World.cs`](../SpiderManEndless.Simulation/World.cs): the placeholder simulation you will
    replace.
-4. [`WorldView.cs`](../GameArchitecture/Views/WorldView.cs): the placeholder drawing you will
+4. [`WorldView.cs`](../SpiderManEndless/Views/WorldView.cs): the placeholder drawing you will
    replace.
 
 Then work through the [walkthrough](walkthrough.md), which adds a small feature end to end.
@@ -111,5 +111,5 @@ Then work through the [walkthrough](walkthrough.md), which adds a small feature 
 | Symptom | Cause and fix |
 |---|---|
 | `NU1605: Detected package downgrade: MonoGame.Tool...` after changing `MonoGameVersion` | The content pipeline's tool packages (`MonoGame.Tool.*`, `MonoGame.Library.*`) must match the versions `MonoGame.Framework.Content.Pipeline` depends on. Set each one to the version the error message names, in `Directory.Packages.props`. |
-| `[E] ... An error occurred trying to start process 'ffprobe'` while building audio | The tool packages must be referenced **directly** in `GameArchitecture.Content.csproj`, not only through other packages, so their executables are copied to the output. Don't remove those references. |
+| `[E] ... An error occurred trying to start process 'ffprobe'` while building audio | The tool packages must be referenced **directly** in `SpiderManEndless.Content.csproj`, not only through other packages, so their executables are copied to the output. Don't remove those references. |
 | `NETSDK1004: Assets file ... project.assets.json not found` in the content project | The game project must reference the content project (`ReferenceOutputAssembly="false"`) so `dotnet restore` reaches it. [`CIS580.Content.targets`](../CIS580/Build/CIS580.Content.targets) adds this reference. Keep its `<Import>` in the game's `.csproj`. |

@@ -7,7 +7,7 @@ playing, or paused. Each answer is an **app state**. States are the app's *contr
 decide what is on screen, who the menus listen to, and what happens when the player chooses
 something.
 
-The code is in `CIS580.MonoGame/Flow/`, and the game's states are in `GameArchitecture/States/`.
+The code is in `CIS580.MonoGame/Flow/`, and the game's states are in `SpiderManEndless/States/`.
 
 ## `AppFlow`: a stack of states
 
@@ -122,7 +122,7 @@ registered as a service in the game's constructor:
 | `PausesSimulation` | `true` | `false` for networked games, where one player can't stop the shared game |
 | `PauseWhenDeviceLost` | `true` | Pause when a player's gamepad is unplugged |
 
-To change them, edit the line in `GameArchitectureExampleGame`:
+To change them, edit the line in `SpiderManEndlessExampleGame`:
 
 ```csharp
 Services.AddService(new PausePolicy { WhoCanPause = PauseRights.FirstPlayer });
@@ -135,11 +135,11 @@ For rules these settings can't express, derive from `PausePolicy` and override `
 
 | State | Shows | Listens to | Goes to |
 |---|---|---|---|
-| [`MainMenuState`](../GameArchitecture/States/MainMenuState.cs) | `BackgroundLayer`, `MainMenuLayer` | every device | `LoadingState(InGameState)` (Play Game), `LobbyState`, or exits |
-| [`LobbyState`](../GameArchitecture/States/LobbyState.cs) | `BackgroundLayer`, `LobbyLayer` | every device | `LoadingState(InGameState)` after the countdown, or `MainMenuState` on cancel |
+| [`MainMenuState`](../SpiderManEndless/States/MainMenuState.cs) | `BackgroundLayer`, `MainMenuLayer` | every device | `LoadingState(InGameState)` (Play Game), `LobbyState`, or exits |
+| [`LobbyState`](../SpiderManEndless/States/LobbyState.cs) | `BackgroundLayer`, `LobbyLayer` | every device | `LoadingState(InGameState)` after the countdown, or `MainMenuState` on cancel |
 | `LoadingState` | `LoadingLayer` | nobody | the target state |
-| [`InGameState`](../GameArchitecture/States/InGameState.cs) | `WorldView`, `HudLayer` | nobody | pushes `PausedState` |
-| [`PausedState`](../GameArchitecture/States/PausedState.cs) | `PauseLayer` | per `PausePolicy` | pops (resume), `MainMenuState`, or exits |
+| [`InGameState`](../SpiderManEndless/States/InGameState.cs) | `WorldView`, `HudLayer` | nobody | pushes `PausedState` |
+| [`PausedState`](../SpiderManEndless/States/PausedState.cs) | `PauseLayer` | per `PausePolicy` | pops (resume), `MainMenuState`, or exits |
 
 ```
  MainMenuState --Play--------------------> LoadingState --> InGameState <--Pop/Resume--.
@@ -153,7 +153,7 @@ For rules these settings can't express, derive from `PausePolicy` and override `
 
 ### Inside `InGameState`
 
-[`InGameState`](../GameArchitecture/States/InGameState.cs) owns a game in progress, so it is
+[`InGameState`](../SpiderManEndless/States/InGameState.cs) owns a game in progress, so it is
 worth reading in full. In order:
 
 - **`Load()`** creates its own `ContentManager` (so all gameplay content can be unloaded when the
@@ -187,10 +187,10 @@ Here is a game-over screen reached when the simulation raises a (hypothetical) `
 
 ```csharp
 using CIS580.Flow;
-using GameArchitecture.Input;
-using GameArchitecture.UI;
+using SpiderManEndless.Input;
+using SpiderManEndless.UI;
 
-namespace GameArchitecture.States;
+namespace SpiderManEndless.States;
 
 public sealed class GameOverState : AppState
 {

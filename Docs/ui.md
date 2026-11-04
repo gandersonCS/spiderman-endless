@@ -10,8 +10,8 @@ This design comes from the XNA *GameStateManagement* sample, with the screen man
 simpler. In particular, deciding *what* to show is left to the [app states](flow.md); layers only
 present things.
 
-The library code is in `CIS580.MonoGame/UI/`, and the game's layers are in `GameArchitecture/UI/`
-and `GameArchitecture/Views/`.
+The library code is in `CIS580.MonoGame/UI/`, and the game's layers are in `SpiderManEndless/UI/`
+and `SpiderManEndless/Views/`.
 
 ## `Layer`
 
@@ -130,7 +130,7 @@ in the constructor or `Load()`.
 `DisabledColor`, `PanelColor`), `TitleScale`, `DimOpacity`, `PanelPadding`, positions
 (`TitleTop`, `MenuTop`), transition durations, and `Sounds`.
 
-The game builds its theme in [`GameTheme.Create`](../GameArchitecture/UI/GameTheme.cs), which
+The game builds its theme in [`GameTheme.Create`](../SpiderManEndless/UI/GameTheme.cs), which
 the layer stack calls once content can be loaded. **Restyle the whole interface there**, not in
 individual menus:
 
@@ -211,14 +211,14 @@ Open(prompt);
 
 | Layer | Kind | Notes |
 |---|---|---|
-| [`BackgroundLayer`](../GameArchitecture/UI/BackgroundLayer.cs) | backdrop, no input | Behind the menus; fades with its transition |
-| [`MainMenuLayer`](../GameArchitecture/UI/MainMenuLayer.cs) | menu | Callbacks for play, local multiplayer (pass `null` to remove it), exit. Cancel asks to confirm exiting. |
-| [`OptionsLayer`](../GameArchitecture/UI/OptionsLayer.cs) | menu | One item per `GameSettings` property; saves settings when closed |
-| [`ControlsLayer`](../GameArchitecture/UI/ControlsLayer.cs) | menu | Rebinding, with a custom `BindingItem` |
-| [`PauseLayer`](../GameArchitecture/UI/PauseLayer.cs) | popup menu | Cancel resumes; quit and exit ask to confirm |
-| [`LobbyLayer`](../GameArchitecture/UI/LobbyLayer.cs) | no input | Draws the lobby; `LobbyState` handles input |
-| [`HudLayer`](../GameArchitecture/Views/HudLayer.cs) | popup, no input | *Placeholder.* Pause hint; player labels and join/leave messages only in multiplayer |
-| [`WorldView`](../GameArchitecture/Views/WorldView.cs) | backdrop, no input | The game world (see [Views](views.md)) |
+| [`BackgroundLayer`](../SpiderManEndless/UI/BackgroundLayer.cs) | backdrop, no input | Behind the menus; fades with its transition |
+| [`MainMenuLayer`](../SpiderManEndless/UI/MainMenuLayer.cs) | menu | Callbacks for play, local multiplayer (pass `null` to remove it), exit. Cancel asks to confirm exiting. |
+| [`OptionsLayer`](../SpiderManEndless/UI/OptionsLayer.cs) | menu | One item per `GameSettings` property; saves settings when closed |
+| [`ControlsLayer`](../SpiderManEndless/UI/ControlsLayer.cs) | menu | Rebinding, with a custom `BindingItem` |
+| [`PauseLayer`](../SpiderManEndless/UI/PauseLayer.cs) | popup menu | Cancel resumes; quit and exit ask to confirm |
+| [`LobbyLayer`](../SpiderManEndless/UI/LobbyLayer.cs) | no input | Draws the lobby; `LobbyState` handles input |
+| [`HudLayer`](../SpiderManEndless/Views/HudLayer.cs) | popup, no input | *Placeholder.* Pause hint; player labels and join/leave messages only in multiplayer |
+| [`WorldView`](../SpiderManEndless/Views/WorldView.cs) | backdrop, no input | The game world (see [Views](views.md)) |
 
 Some layers (`OptionsLayer`, `ControlsLayer`) take an `overGame` flag. When they're opened
 from the pause menu, they are full (non-popup) menus with `DimBackground`, so they cover the pause
@@ -239,7 +239,7 @@ using CIS580.Input;
 using CIS580.UI;
 using CIS580.UI.Widgets;
 
-namespace GameArchitecture.UI;
+namespace SpiderManEndless.UI;
 
 /// <summary>
 /// The game-over menu. Like the other menus, it only presents choices; the state decides what they do.
@@ -306,7 +306,7 @@ public class MessageLayer : Layer
 
 ### Changing the HUD
 
-[`HudLayer`](../GameArchitecture/Views/HudLayer.cs) is a placeholder. It draws in **screen
+[`HudLayer`](../SpiderManEndless/Views/HudLayer.cs) is a placeholder. It draws in **screen
 space** (pixels), over the world. Give it whatever it needs to read (the session, the local
 players) through its constructor, which `InGameState.Enter` calls, and draw from that state each
 frame. For things that *happen* (a score popping up, a "Round 2" banner), subscribe it to

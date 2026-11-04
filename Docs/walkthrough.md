@@ -14,22 +14,22 @@ work:
 6. [game feel](#6-make-it-feel-good): a little shake and rumble
 
 The code below has been built and tested against this project. Run the game with
-`dotnet run --project GameArchitecture -- --play` at any point to see your progress.
+`dotnet run --project SpiderManEndless -- --play` at any point to see your progress.
 
 ## 1. The simulation
 
 Everything about *what happens* (where coins are, who collected one, the score) belongs in the
-simulation, in `GameArchitecture.Simulation`. Remember the [rules](simulation.md#rules-for-staying-deterministic):
+simulation, in `SpiderManEndless.Simulation`. Remember the [rules](simulation.md#rules-for-staying-deterministic):
 no MonoGame types, and randomness only from `World.Random`.
 
 ### The `Coin` entity
 
-Create `GameArchitecture.Simulation/Coin.cs`:
+Create `SpiderManEndless.Simulation/Coin.cs`:
 
 ```csharp
 using System.Numerics;
 
-namespace GameArchitecture.Simulation;
+namespace SpiderManEndless.Simulation;
 
 /// <summary>
 /// A coin waiting to be collected
@@ -54,7 +54,7 @@ public sealed class Coin
 
 ### Coins in the world
 
-In [`World.cs`](../GameArchitecture.Simulation/World.cs), add a list of coins after the players
+In [`World.cs`](../SpiderManEndless.Simulation/World.cs), add a list of coins after the players
 list. Expose it read-only, so only the simulation can change it:
 
 ```csharp
@@ -89,7 +89,7 @@ accidentally spawn a coin.
 
 ### A score
 
-In [`PlayerAvatar.cs`](../GameArchitecture.Simulation/PlayerAvatar.cs), below `Position`:
+In [`PlayerAvatar.cs`](../SpiderManEndless.Simulation/PlayerAvatar.cs), below `Position`:
 
 ```csharp
     /// <summary>
@@ -101,7 +101,7 @@ In [`PlayerAvatar.cs`](../GameArchitecture.Simulation/PlayerAvatar.cs), below `P
 ### An event
 
 The simulation can't play a sound or shake the screen, so it *reports* the collection and lets
-the client react. In [`GameEvents.cs`](../GameArchitecture.Simulation/GameEvents.cs), add
+the client react. In [`GameEvents.cs`](../SpiderManEndless.Simulation/GameEvents.cs), add
 `using System.Numerics;` at the top and this record at the bottom:
 
 ```csharp
@@ -116,7 +116,7 @@ without looking anything up.
 
 ### The rules
 
-In [`GameSession.cs`](../GameArchitecture.Simulation/GameSession.cs), add
+In [`GameSession.cs`](../SpiderManEndless.Simulation/GameSession.cs), add
 `using System.Numerics;` at the top. In `Tick`, after the players have moved and before the
 wanderer updates, collect and replace coins:
 
@@ -161,7 +161,7 @@ same tick, the earlier one always wins, on every machine.
 
 ## 2. Test it
 
-In [`GameSessionTests.cs`](../Tests/GameArchitecture.Tests/GameSessionTests.cs), add a test that
+In [`GameSessionTests.cs`](../Tests/SpiderManEndless.Tests/GameSessionTests.cs), add a test that
 coins are always available. It uses the file's existing `Start`, `One`, and `Circling` helpers:
 
 ```csharp
@@ -187,12 +187,12 @@ the new state too (add `using System.Linq;` at the top):
         Assert.Equal(a.World.Coins.Select(c => c.Position), b.World.Coins.Select(c => c.Position));
 ```
 
-Run `dotnet test GameArchitecture.slnx`. If you had used `System.Random` in `SpawnCoin`, the
+Run `dotnet test SpiderManEndless.slnx`. If you had used `System.Random` in `SpawnCoin`, the
 determinism test would now fail, which is exactly what it's there for.
 
 ## 3. Draw the coins
 
-The rest happens in the game client. In [`WorldView.DrawWorld`](../GameArchitecture/Views/WorldView.cs),
+The rest happens in the game client. In [`WorldView.DrawWorld`](../SpiderManEndless/Views/WorldView.cs),
 after `var world = _session.World;`:
 
 ```csharp
@@ -214,7 +214,7 @@ position) onto one makes it vanish and a new one appear elsewhere.
 ## 4. Show the score
 
 The HUD needs to read the scores, so give it the session. In
-[`HudLayer.cs`](../GameArchitecture/Views/HudLayer.cs), add a field and a constructor parameter:
+[`HudLayer.cs`](../SpiderManEndless/Views/HudLayer.cs), add a field and a constructor parameter:
 
 ```csharp
     private readonly IReadOnlyList<LocalPlayer> _players;
@@ -249,7 +249,7 @@ A single player sees just "Score: 3", with no "Player 1"; single-player games sh
 multiplayer details.
 
 Finally, pass the session where the HUD is created, in
-[`InGameState.Enter`](../GameArchitecture/States/InGameState.cs):
+[`InGameState.Enter`](../SpiderManEndless/States/InGameState.cs):
 
 ```csharp
         var hud = Show(new HudLayer(_players, Session));
@@ -257,7 +257,7 @@ Finally, pass the session where the HUD is created, in
 
 ## 5. Make it sound good
 
-In [`GameAudio.cs`](../GameArchitecture/Audio/GameAudio.cs), add a cue field and create it in the
+In [`GameAudio.cs`](../SpiderManEndless/Audio/GameAudio.cs), add a cue field and create it in the
 constructor. Gameplay sounds go on the **Effects** bus, so they pause with the game:
 
 ```csharp
@@ -283,13 +283,13 @@ Then play it in `OnGameEvent`:
                 break;
 ```
 
-When you have a real sound, put `coin.wav` in `GameArchitecture.Content/Assets/Audio/Sfx/`, load
+When you have a real sound, put `coin.wav` in `SpiderManEndless.Content/Assets/Audio/Sfx/`, load
 `"Audio/Sfx/coin"` instead, and add it to [`ASSETS.md`](../ASSETS.md). Better still, pass
 two or three recordings to the cue as variations (see [Audio](audio.md#soundcue)).
 
 ## 6. Make it feel good
 
-In [`GameFeedback.OnGameEvent`](../GameArchitecture/Feedback/GameFeedback.cs), add a light shake
+In [`GameFeedback.OnGameEvent`](../SpiderManEndless/Feedback/GameFeedback.cs), add a light shake
 and a short buzz for the player who collected it:
 
 ```csharp
@@ -307,12 +307,12 @@ effects (and `_hitStop`) for rarer, bigger moments. See [Game Feel](feedback.md#
 
 | Concern | Change | Project |
 |---|---|---|
-| Simulation | `Coin`, `World.Coins`, `PlayerAvatar.Score`, `CoinCollected`, `GameSession.CollectCoins` | `GameArchitecture.Simulation` |
-| Tests | coins always available; determinism covers the new state | `GameArchitecture.Tests` |
-| View | coins drawn in `WorldView` | `GameArchitecture` |
-| UI | score in `HudLayer` | `GameArchitecture` |
-| Audio | `CoinCollected` cue in `GameAudio` | `GameArchitecture` |
-| Game feel | shake and rumble in `GameFeedback` | `GameArchitecture` |
+| Simulation | `Coin`, `World.Coins`, `PlayerAvatar.Score`, `CoinCollected`, `GameSession.CollectCoins` | `SpiderManEndless.Simulation` |
+| Tests | coins always available; determinism covers the new state | `SpiderManEndless.Tests` |
+| View | coins drawn in `WorldView` | `SpiderManEndless` |
+| UI | score in `HudLayer` | `SpiderManEndless` |
+| Audio | `CoinCollected` cue in `GameAudio` | `SpiderManEndless` |
+| Game feel | shake and rumble in `GameFeedback` | `SpiderManEndless` |
 
 Notice what you **didn't** touch: the library (`CIS580/`), the input system (walking was already
 a command), and the app flow. The simulation knows nothing about sound, shake, or the HUD, and

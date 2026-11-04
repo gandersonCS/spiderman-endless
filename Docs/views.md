@@ -7,7 +7,7 @@ The simulation measures everything in **world units**; a **camera** decides whic
 world appears where on screen, and at what size. Keeping these apart is what lets the game fit
 any window size, scroll, zoom, shake, or split the screen without the simulation knowing.
 
-The library code is in `CIS580.MonoGame/Views/`, and the game's views are in `GameArchitecture/Views/`.
+The library code is in `CIS580.MonoGame/Views/`, and the game's views are in `SpiderManEndless/Views/`.
 
 ## World units vs. pixels
 
@@ -70,12 +70,12 @@ Inside `DrawWorld`, the `SpriteBatch` is **already begun**. Just call `SpriteBat
 
 ## This game's views
 
-- [`WorldView`](../GameArchitecture/Views/WorldView.cs): *placeholder* drawing. A cornflower-blue
+- [`WorldView`](../SpiderManEndless/Views/WorldView.cs): *placeholder* drawing. A cornflower-blue
   world rectangle, each avatar as the text `// TODO` in its player color, and the wanderer. It
   subscribes to `PlayerJoined` events to draw a spawn flash.
-- [`HudLayer`](../GameArchitecture/Views/HudLayer.cs): *placeholder* screen-space HUD (see
+- [`HudLayer`](../SpiderManEndless/Views/HudLayer.cs): *placeholder* screen-space HUD (see
   [UI](ui.md#changing-the-hud)).
-- [`PlayerColors`](../GameArchitecture/Views/PlayerColors.cs): the color identifying each
+- [`PlayerColors`](../SpiderManEndless/Views/PlayerColors.cs): the color identifying each
   player, used by the world, the HUD, and the lobby, so people can tell who is who everywhere.
 
 ## Extending views
