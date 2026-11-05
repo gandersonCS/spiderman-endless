@@ -16,10 +16,26 @@ public enum RunnerState
 }
 
 /// <summary>
-/// Input for the runner this tick, merged from all players. It's a one-button game: tap to jump,
-/// keep holding in the air to swing.
+/// Which attack he's doing. They all do the same damage, they just look (and are timed) differently.
+/// Picked when the attack starts, from what he's doing at that moment.
 /// </summary>
-public readonly record struct RunnerInput(bool JumpPressed, bool JumpDown);
+public enum AttackKind
+{
+    /// <summary>Not attacking</summary>
+    None,
+    /// <summary>On a roof: jab punch</summary>
+    Jab,
+    /// <summary>In the air, moving up: upward kick</summary>
+    UpwardKick,
+    /// <summary>In the air, falling: air kick</summary>
+    AirKick,
+}
+
+/// <summary>
+/// Input for the runner this tick, merged from all players. Jump button: press on a roof to jump,
+/// press again in the air (like a double jump) and hold to swing. Attack button (click): attack.
+/// </summary>
+public readonly record struct RunnerInput(bool JumpPressed, bool JumpDown, bool AttackPressed = false);
 
 /// <summary>
 /// Spider-Man in the simulation. We only track him vertically (feet height + state) since he
@@ -31,8 +47,10 @@ public readonly record struct RunnerInput(bool JumpPressed, bool JumpDown);
 /// I added coyote time and a jump buffer so edge jumps don't feel unfair.
 /// </para>
 /// <para>
-/// Holding the button once he starts falling shoots a web at a spot up and ahead of him and he
-/// swings from it. No fixed anchor points, you can swing from anywhere.
+/// Pressing the button again while in the air (a second press, like a double jump) and holding it
+/// once he starts falling shoots a web at a spot up and ahead of him and he swings from it. The
+/// press you jumped with never turns into a swing, so holding jump for a high jump is safe.
+/// No fixed anchor points, you can swing from anywhere.
 /// </para>
 /// <para>
 /// The swing is an actual pendulum sim. He keeps whatever speed he came in with, picks up speed
@@ -41,6 +59,12 @@ public readonly record struct RunnerInput(bool JumpPressed, bool JumpDown);
 /// scales with speed so swings take roughly the same time no matter how fast you're going.
 /// Releasing, or swinging up to the same angle you started at, drops you. Hitting a wall or
 /// falling in a gap ends the run.
+/// </para>
+/// <para>
+/// Attacking: one button, three looks. On a roof it's a jab, in the air (jumping or swinging)
+/// it's an upward kick if he's going up and an air kick if he's coming down. Attacks don't
+/// change his movement. A jab gets cut off if he leaves the roof, and a kick if he lands.
+/// Pressing attack during an attack queues the next one if it's close to the end (attack buffer).
 /// </para>
 /// </remarks>
 public sealed class Runner
@@ -80,6 +104,13 @@ public sealed class Runner
     /// <summary>How long after dying before a button press counts as "continue"</summary>
     public const float ContinueDelaySeconds = 0.8f;
 
+    // how long each attack lasts (also how long its animation plays)
+    public const float JabSeconds = 0.32f;
+    public const float UpwardKickSeconds = 0.35f;
+    public const float AirKickSeconds = 0.30f;
+    /// <summary>An attack press this close to the end of the current attack starts the next one right after</summary>
+    public const float AttackBufferSeconds = 0.12f;
+
     // spots on his body we check for roofs - slightly behind and slightly in front of center
     private const float FootBack = 10f;
     private const float FootFront = 20f;
@@ -92,6 +123,7 @@ public sealed class Runner
     private bool _jumpHeld;
     private bool _webLocked;
     private float _deadSeconds;
+    private float _attackBuffer;
 
     // pendulum state. theta = rope angle from straight down (negative means he's behind the anchor),
     // omega = how fast it's changing
@@ -129,6 +161,24 @@ public sealed class Runner
 
     public RunEndReason? EndReason { get; private set; }
 
+    /// <summary>The attack he's doing right now (None if he isn't)</summary>
+    public AttackKind Attack { get; private set; }
+
+    /// <summary>Time since the current attack started, for the animation (and hit timing later)</summary>
+    public float AttackSeconds { get; private set; }
+
+    /// <summary>True while an attack is happening</summary>
+    public bool IsAttacking => Attack != AttackKind.None;
+
+    /// <summary>How long an attack lasts, in seconds</summary>
+    public static float DurationOf(AttackKind kind) => kind switch
+    {
+        AttackKind.Jab => JabSeconds,
+        AttackKind.UpwardKick => UpwardKickSeconds,
+        AttackKind.AirKick => AirKickSeconds,
+        _ => 0f,
+    };
+
     /// <summary>
     /// Rope angle from straight up in degrees. Positive if the anchor is in front of him.
     /// </summary>
@@ -150,11 +200,15 @@ public sealed class Runner
         _tick = tick;
 
         _jumpBuffer = input.JumpPressed ? JumpBufferSeconds : MathF.Max(0, _jumpBuffer - dt);
+        _attackBuffer = input.AttackPressed ? AttackBufferSeconds : MathF.Max(0, _attackBuffer - dt);
         if (!input.JumpDown)
             _webLocked = false;
 
         if (State == RunnerState.Dead)
         {
+            Attack = AttackKind.None;
+            _attackBuffer = 0;
+
             // fall off screen, then wait for a button press to continue
             _deadSeconds += dt;
             VelocityY += Gravity * dt;
@@ -174,7 +228,46 @@ public sealed class Runner
                 UpdateSwinging(input, track, dt);
                 break;
         }
+
+        // after moving, so a jump and a click on the same tick gives a kick, not a jab
+        UpdateAttack(dt);
         return false;
+    }
+
+    /// <summary>
+    /// Runs the current attack's timer, cuts it off if he's no longer where it started
+    /// (ground vs air), and starts a new one if attack was pressed
+    /// </summary>
+    private void UpdateAttack(float dt)
+    {
+        if (State == RunnerState.Dead)
+        {
+            Attack = AttackKind.None;
+            return;
+        }
+
+        if (Attack != AttackKind.None)
+        {
+            AttackSeconds += dt;
+            bool onGround = State == RunnerState.Running;
+            bool wrongPlace = (Attack == AttackKind.Jab) != onGround;
+            if (wrongPlace || AttackSeconds >= DurationOf(Attack))
+                Attack = AttackKind.None;
+        }
+
+        if (Attack == AttackKind.None && _attackBuffer > 0)
+            StartAttack();
+    }
+
+    private void StartAttack()
+    {
+        // ground = jab, going up = upward kick, coming down = air kick
+        Attack = State == RunnerState.Running ? AttackKind.Jab
+            : VelocityY < 0 ? AttackKind.UpwardKick
+            : AttackKind.AirKick;
+        AttackSeconds = 0;
+        _attackBuffer = 0;
+        _events.Raise(new RunnerAttacked(_tick, Attack));
     }
 
     private void UpdateRunning(in RunnerInput input, RooftopTrack track, float dt)
@@ -221,7 +314,8 @@ public sealed class Runner
                 VelocityY *= JumpCut;
         }
 
-        // still holding when he starts falling (or pressed again mid-air) -> web swing
+        // pressed again mid-air (not the press he jumped with) and holding when he starts falling -> web swing.
+        // _webLocked is set by Jump/Land/ReleaseWeb and only clears when the button is let go
         if (input.JumpDown && !_webLocked && VelocityY >= 0)
         {
             AttachWeb(track);
@@ -297,6 +391,9 @@ public sealed class Runner
         _canCoyote = false;
         _jumpHeld = false;
         _webLocked = true;      // ...or swing, if they're still holding the button
+        Attack = AttackKind.None;
+        AttackSeconds = 0;
+        _attackBuffer = 0;      // ...or attack, if they clicked the Continue button
     }
 
     private void Jump()
@@ -307,6 +404,7 @@ public sealed class Runner
         _jumpBuffer = 0;
         _canCoyote = false;
         _jumpHeld = true;
+        _webLocked = true;      // the jump press can't also swing - let go and press again in the air
         _events.Raise(new RunnerJumped(_tick));
     }
 
@@ -408,6 +506,7 @@ public sealed class Runner
         State = RunnerState.Dead;
         EndReason = reason;
         Anchor = null;
+        Attack = AttackKind.None;
         track.ScrollDrivenByRunner = false;
         _deadSeconds = 0;
         track.IsScrolling = false;

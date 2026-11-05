@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CIS580.Settings;
 
 namespace SpiderManEndless.Settings;
@@ -24,6 +25,12 @@ public sealed class SaveData
 
     /// <summary>Spider-Essence the player can spend in the Closet</summary>
     public int SpiderEssence { get; set; }
+
+    /// <summary>Ids of costumes the player has bought (free ones aren't listed, they're always owned)</summary>
+    public List<string> OwnedCostumes { get; set; } = new();
+
+    /// <summary>Id of the costume the player is wearing</summary>
+    public string EquippedCostume { get; set; } = "classic";
 }
 
 /// <summary>
@@ -100,6 +107,47 @@ public sealed class SaveFile
         if (amount < 0 || amount > Data.SpiderEssence)
             return false;
         Data.SpiderEssence -= amount;
+        Save();
+        return true;
+    }
+
+    /// <summary>True if the player can wear this costume (free ones always count)</summary>
+    public bool Owns(Costume costume)
+    {
+        if (costume == null)
+            return false;
+        if (costume.IsFree)
+            return true;
+        Data.OwnedCostumes ??= new List<string>();
+        return Data.OwnedCostumes.Contains(costume.Id);
+    }
+
+    /// <summary>True if this costume is the one being worn</summary>
+    public bool IsEquipped(Costume costume) => costume != null && Costumes.Equipped(this) == costume;
+
+    /// <summary>
+    /// Buys a costume: spends its price and adds it to the owned list, then saves. Doesn't equip it.
+    /// </summary>
+    /// <returns>False if it's already owned or they can't afford it (nothing changes)</returns>
+    public bool TryBuyCostume(Costume costume)
+    {
+        if (costume == null || Owns(costume) || costume.Price > Data.SpiderEssence)
+            return false;
+        Data.SpiderEssence -= costume.Price;
+        Data.OwnedCostumes.Add(costume.Id);
+        Save();
+        return true;
+    }
+
+    /// <summary>
+    /// Puts on a costume the player owns, then saves
+    /// </summary>
+    /// <returns>False if they don't own it</returns>
+    public bool Equip(Costume costume)
+    {
+        if (!Owns(costume))
+            return false;
+        Data.EquippedCostume = costume.Id;
         Save();
         return true;
     }

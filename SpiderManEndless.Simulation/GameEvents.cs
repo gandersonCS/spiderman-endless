@@ -41,6 +41,12 @@ public sealed record WebAttached(long Tick) : GameEvent(Tick);
 public sealed record WebReleased(long Tick) : GameEvent(Tick);
 
 /// <summary>
+/// Fired when he starts an attack (doesn't mean it hit anything)
+/// </summary>
+/// <param name="Kind">Which attack - they all do the same damage, they just look different</param>
+public sealed record RunnerAttacked(long Tick, AttackKind Kind) : GameEvent(Tick);
+
+/// <summary>
 /// How the run ended
 /// </summary>
 public enum RunEndReason { Fell, HitWall }

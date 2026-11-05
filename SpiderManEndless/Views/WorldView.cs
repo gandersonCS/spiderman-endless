@@ -338,6 +338,14 @@ public class WorldView : WorldLayer
     {
         var feet = new Vector2(RooftopTrack.RunnerX, MathF.Round(runner.FeetY));
 
+        // attacking on a roof or in the air replaces the normal pose (swinging is handled below,
+        // since the web still gets drawn)
+        if (runner.IsAttacking && runner.State is RunnerState.Running or RunnerState.Airborne)
+        {
+            DrawFrame(SpiderFrames.AttackFrame(runner.Attack, runner.AttackSeconds), feet);
+            return;
+        }
+
         switch (runner.State)
         {
             case RunnerState.Running:
@@ -372,11 +380,14 @@ public class WorldView : WorldLayer
                 var anchorOnScreen = new Vector2((float)(anchor.X - track.ScrollX), anchor.Y);
 
                 // web shoots out to the anchor quickly, then he hangs from it. pose depends on the
-                // rope angle
+                // rope angle (or he kicks while hanging on)
                 var tip = Vector2.Lerp(hand, anchorOnScreen, MathF.Min(1f, runner.SwingSeconds / 0.07f));
                 DrawLine(hand, tip, Color.Black * 0.35f, 5);
                 DrawLine(hand, tip, RopeColor, 2.5f);
-                DrawFrame(SpiderFrames.SwingFor(runner.RopeAngleDegrees(track)), hand);
+                if (runner.IsAttacking)
+                    DrawFrame(SpiderFrames.AttackFrame(runner.Attack, runner.AttackSeconds), feet);
+                else
+                    DrawFrame(SpiderFrames.SwingFor(runner.RopeAngleDegrees(track)), hand);
                 break;
             }
 
@@ -409,6 +420,8 @@ public class WorldView : WorldLayer
         // controls hint at the start of a run (two short lines, so it fits on screen)
         if (runner.State != RunnerState.Dead && track.DistanceMeters < 80)
         {
+            DrawCentered("CLICK: attack", new Vector2(World.Width / 2, World.Height - 92),
+                Color.White, HintScale);
             DrawCentered("SPACE / A: jump  (hold to jump higher)", new Vector2(World.Width / 2, World.Height - 62),
                 Color.White, HintScale);
             DrawCentered("Keep holding in the air to web-swing", new Vector2(World.Width / 2, World.Height - 32),
@@ -622,6 +635,68 @@ public static class SpiderFrames
     public static readonly Frame Apex = Frame.Feet(172, 493, 39, 34);
     public static readonly Frame Falling = Frame.Feet(230, 509, 27, 32);
     public static readonly Frame Dead = Frame.Middle(242, 2533, 35, 29);
+
+    // ---- attacks ----
+    // These frames are lined up by his eyes (the light blue lens pixels on the sheet) instead of
+    // their bounding boxes, so his head stays put while his arms/legs swing around.
+
+    /// <summary>Sheet y of his feet in the jab frames</summary>
+    private const int JabBaseline = 1213;
+
+    /// <summary>How far his eyes are in front of the feet origin while running (sheet px), so the jab lines up with the run</summary>
+    private const float RunEyeAhead = 16;
+
+    /// <summary>Where his eyes sit relative to his feet in the jump frames (sheet px), so the kicks line up with the jump</summary>
+    private const float AirEyeAhead = 2;
+    private const float AirEyeAbove = 26;
+
+    /// <summary>Jab frame: feet on the baseline, eyes where they are when running</summary>
+    private static Frame Jab(int x, int y, int width, int height, int eyeX)
+        => new(new Rectangle(x, y, width, height), new Vector2(eyeX - x - RunEyeAhead, JabBaseline - y));
+
+    /// <summary>Kick frame: placed so his eyes are where they'd be in a normal jump frame</summary>
+    private static Frame Kick(int x, int y, int width, int height, int eyeX, int eyeY)
+        => new(new Rectangle(x, y, width, height), new Vector2(eyeX - x - AirEyeAhead, eyeY - y + AirEyeAbove));
+
+    /// <summary>"Jab Punch" on the sheet: crouch, lunge + punch, recover</summary>
+    public static readonly Frame[] JabPunch =
+    {
+        Jab(8, 1179, 36, 34, 36), Jab(61, 1180, 50, 34, 92), Jab(123, 1180, 49, 34, 154),
+        Jab(181, 1180, 48, 33, 213), Jab(240, 1181, 41, 32, 272), Jab(295, 1183, 37, 30, 325),
+        Jab(346, 1180, 30, 33, 373),
+    };
+
+    /// <summary>"Upward Kick" on the sheet: tuck, kick straight up (with the swoosh), come back down</summary>
+    public static readonly Frame[] UpwardKick =
+    {
+        Kick(12, 1423, 35, 38, 31, 1438), Kick(68, 1412, 34, 28, 85, 1416), Kick(128, 1392, 41, 50, 143, 1405),
+        Kick(209, 1383, 35, 58, 223, 1396), Kick(276, 1386, 31, 54, 289, 1400), Kick(337, 1409, 40, 38, 351, 1415),
+        Kick(405, 1424, 32, 39, 421, 1434),
+    };
+
+    /// <summary>"Air Kick" on the sheet: wind-up (with the swoosh), then the dive kick he holds</summary>
+    public static readonly Frame[] AirKick =
+    {
+        Kick(422, 1162, 47, 47, 439, 1171), Kick(484, 1160, 46, 49, 501, 1170),
+    };
+
+    /// <summary>How long the air kick's first frame shows before he holds the kick pose</summary>
+    private const float AirKickWindUpSeconds = 0.08f;
+
+    /// <summary>
+    /// The frame for an attack this far in. Jab and upward kick spread their frames evenly over
+    /// the attack's length (see <see cref="Runner.DurationOf"/>), the air kick holds its last frame
+    /// </summary>
+    public static Frame AttackFrame(AttackKind kind, float seconds)
+    {
+        if (kind == AttackKind.AirKick)
+            return AirKick[seconds < AirKickWindUpSeconds ? 0 : 1];
+
+        var frames = kind == AttackKind.Jab ? JabPunch : UpwardKick;
+        float progress = seconds / Runner.DurationOf(kind);
+        int index = Math.Clamp((int)(progress * frames.Length), 0, frames.Length - 1);
+        return frames[index];
+    }
 
     // swinging poses, ordered from rope pointing way ahead (first) to straight up/behind (last)
     private static readonly Frame[] Swing =

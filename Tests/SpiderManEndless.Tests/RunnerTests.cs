@@ -191,14 +191,20 @@ public class RunnerTests
         Assert.False(world.CanContinue);       // he's alive
     }
 
+    // full jump at tick 10, let go around the top of the jump, then press again in the air and
+    // keep holding (until releaseTick) to swing
+    private static Func<long, ActionSet> JumpThenSwing(long releaseTick = long.MaxValue)
+        => tick => (tick is >= 10 and < 34) || (tick >= 36 && tick < releaseTick)
+            ? Holding(GameAction.Jump)
+            : default;
+
     [Fact]
-    public void HoldingJumpThroughTheAirStartsASwing_AndLettingGoEndsIt()
+    public void PressingJumpAgainInTheAirStartsASwing_AndLettingGoEndsIt()
     {
-        // hold from tick 10 to 90 then release
-        var (session, runner) = Start(1, tick => tick is >= 10 and < 90 ? Holding(GameAction.Jump) : default);
+        var (session, runner) = Start(1, JumpThenSwing(releaseTick: 100));
 
         bool swung = false, anchoredWhileSwinging = true;
-        for (int i = 0; i < 80; i++)
+        for (int i = 0; i < 90; i++)
         {
             runner.Step();
             var state = session.World.Runner;
@@ -209,9 +215,22 @@ public class RunnerTests
             }
         }
 
-        Assert.True(swung, "Holding jump in the air should start a swing");
+        Assert.True(swung, "Pressing jump again in the air should start a swing");
         Assert.True(anchoredWhileSwinging);
         Assert.Contains(session.Events.Pending, e => e is WebAttached);
+    }
+
+    [Fact]
+    public void HoldingTheJumpPress_NeverSwings()
+    {
+        // press on the roof and never let go - high jump only, no swing
+        var (session, runner) = Start(1, tick => tick >= 10 ? Holding(GameAction.Jump) : default);
+
+        for (int i = 0; i < 90; i++)
+        {
+            runner.Step();
+            Assert.NotEqual(RunnerState.Swinging, session.World.Runner.State);
+        }
     }
 
     [Fact]
@@ -230,8 +249,7 @@ public class RunnerTests
     [Fact]
     public void Swinging_BuildsSpeedThroughTheBottomOfTheArc()
     {
-        // hold from tick 10 through the jump and the swing
-        var (session, runner) = Start(1, tick => tick >= 10 ? Holding(GameAction.Jump) : default);
+        var (session, runner) = Start(1, JumpThenSwing());
 
         float fastest = 0;
         float speedWhenGrabbing = 0;
@@ -259,7 +277,7 @@ public class RunnerTests
     [Fact]
     public void Swinging_NeverStopsTheCity()
     {
-        var (session, runner) = Start(1, tick => tick >= 10 ? Holding(GameAction.Jump) : default);
+        var (session, runner) = Start(1, JumpThenSwing());
 
         for (int i = 0; i < 120; i++)
         {
@@ -267,5 +285,92 @@ public class RunnerTests
             if (session.World.Runner.State == RunnerState.Swinging)
                 Assert.True(session.World.Track.Speed > RooftopTrack.BaseSpeed * 0.5f);
         }
+    }
+
+    // ---- attacks ----
+
+    // jump is held from tick 10 to 15 (a medium jump). attack is pressed on whichever tick
+    // the test sets attackOn to
+    private static (GameSession session, SessionRunner runner) StartWithAttack(Func<long> attackOn)
+        => Start(1, tick =>
+        {
+            var actions = tick is >= 10 and < 16 ? Holding(GameAction.Jump) : default;
+            return tick == attackOn() ? actions.With(GameAction.Attack) : actions;
+        });
+
+    [Fact]
+    public void Attacking_OnARoof_IsAJab()
+    {
+        var (session, runner) = StartWithAttack(() => 5);
+        for (int i = 0; i <= 5; i++)
+            runner.Step();
+
+        Assert.Equal(RunnerState.Running, session.World.Runner.State);
+        Assert.Equal(AttackKind.Jab, session.World.Runner.Attack);
+    }
+
+    [Fact]
+    public void Attacking_WhileGoingUp_IsAnUpwardKick()
+    {
+        var (session, runner) = StartWithAttack(() => 13);
+        for (int i = 0; i <= 13; i++)
+            runner.Step();
+
+        Assert.Equal(RunnerState.Airborne, session.World.Runner.State);
+        Assert.Equal(AttackKind.UpwardKick, session.World.Runner.Attack);
+    }
+
+    [Fact]
+    public void Attacking_WhileFalling_IsAnAirKick()
+    {
+        // press attack on the tick after he starts coming down
+        long attackTick = -1;
+        var (session, runner) = StartWithAttack(() => attackTick);
+        for (int i = 0; i < 120 && session.World.Runner.Attack == AttackKind.None; i++)
+        {
+            var him = session.World.Runner;
+            if (attackTick < 0 && him.State == RunnerState.Airborne && him.VelocityY > 0)
+                attackTick = session.TickCount;
+            runner.Step();
+        }
+
+        Assert.Equal(AttackKind.AirKick, session.World.Runner.Attack);
+    }
+
+    [Fact]
+    public void AnAttack_EndsAfterItsDuration_AndRaisesAnEvent()
+    {
+        // no jumping here, so the jab gets to finish
+        var (session, runner) = Start(1, tick => tick == 2 ? Holding(GameAction.Attack) : default);
+        bool raised = false;
+        for (int i = 0; i <= 2; i++)
+        {
+            runner.Step();
+            raised |= session.Events.Pending.Any(e => e is RunnerAttacked { Kind: AttackKind.Jab });
+            session.Events.Clear();
+        }
+        Assert.True(raised);
+        Assert.True(session.World.Runner.IsAttacking);
+
+        int ticks = 0;
+        while (session.World.Runner.IsAttacking && ticks < 200)
+        {
+            runner.Step();
+            ticks++;
+        }
+        float seconds = ticks * (float)runner.TickDuration.TotalSeconds;
+        Assert.InRange(seconds, Runner.JabSeconds - 0.05f, Runner.JabSeconds + 0.05f);
+    }
+
+    [Fact]
+    public void Jumping_CutsOffAJab()
+    {
+        // jab just before jumping, so he leaves the roof mid-punch
+        var (session, runner) = StartWithAttack(() => 9);
+        for (int i = 0; i < 14; i++)
+            runner.Step();
+
+        Assert.Equal(RunnerState.Airborne, session.World.Runner.State);
+        Assert.NotEqual(AttackKind.Jab, session.World.Runner.Attack);
     }
 }

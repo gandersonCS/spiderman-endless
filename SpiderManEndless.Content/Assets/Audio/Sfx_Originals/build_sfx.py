@@ -197,8 +197,10 @@ def thwip(seed, dur=0.17):
     return norm(mix, -1)
 
 
+# the game's WebThwip1-4.wav are now the ones designed in Thwip Lab (see thwip-settings.json), so
+# these synthesized ones are saved under another name and no longer overwrite them
 for i, seed in enumerate([5800, 5801, 5802, 5803], 1):
-    save(f'WebThwip{i}.wav', thwip(seed))
+    save(f'OldThwip{i}.wav', thwip(seed))
 
 
 # ---------------------------------------------------------------- web release whoosh (synthesized)
@@ -262,37 +264,52 @@ for i, seed in enumerate([9100, 9101, 9102, 9103, 9104], 1):
 
 
 # ---------------------------------------------------------------- web tension (seamless loop)
-def tension_loop(seed, loop_s=2.0, xfade_s=0.3):
-    """A rope held at its limit, steady: one continuous stick-slip creak (fibers grabbing and
-    slipping over and over at an even, slightly jittery rate, each grab ringing the rope's body),
-    with a constant fizz of fiber crackle on top. Even all the way through, so it reads as tension
-    rather than as separate events. The tail is cross-faded into the head so it loops cleanly."""
+def tension_loop(seed, loop_s=2.4, xfade_s=0.3):
+    """Spider-Man's web pulled taut: silky and tough rather than a rope. No creaking pulse train.
+    - silk: a smooth, airy shimmer of fine fibers, a high noise band drifting slowly up and down
+    - strain: a soft, breathy "eee" in the mids, like a stretched elastic line holding the load
+    - fibers: a faint, fine fizz of strands, very sparse
+    - give: one or two tiny soft creaks per loop, high and short, so it feels like it's under load
+    Whole-cycle modulation and a cross-faded seam so it loops cleanly."""
     rng = np.random.default_rng(seed)
     n = int(loop_s * SR) + int(xfade_s * SR)
     t = np.arange(n) / SR
+    j = lambda a, b: rng.uniform(a, b)
+    cyc = lambda k, ph: np.sin(2 * np.pi * (k / loop_s) * t + ph)
 
-    creak = np.zeros(n)
-    body = np.array([520.0, 1190.0, 1730.0])          # the rope's resonances (fixed: one rope)
-    pos = 0.0
-    while pos < n / SR - 0.001:
-        k = int(pos * SR); m = min(n - k, 600)
-        tt = np.arange(m) / SR
-        g = sum(np.sin(2 * np.pi * f * rng.uniform(0.97, 1.03) * tt) * np.exp(-tt / (0.004 / (1 + i))) / (1 + i)
-                for i, f in enumerate(body))
-        g = g + rng.standard_normal(m) * np.exp(-tt / 0.0005) * 0.7
-        creak[k:k + m] += g * rng.uniform(0.75, 1.0)
-        pos += 1.0 / 42.0 * rng.uniform(0.7, 1.35)    # ~42 grabs a second, unevenly spaced
-    # a very gentle, slow breathing in strength (whole cycles, so the loop lines up)
-    creak *= 0.85 + 0.15 * np.sin(2 * np.pi * (2 / loop_s) * t)
+    # silk: a slowly moving bright band (center drifts with whole cycles of the loop)
+    center = j(4500, 6000) * (1 + 0.18 * cyc(1, j(0, 6)) + 0.08 * cyc(3, j(0, 6)))
+    silk = np.zeros(n); y1 = y2 = 0.0
+    x = rng.standard_normal(n)
+    for i in range(n):
+        w = 2 * np.pi * center[i] / SR; r = np.exp(-w / (2 * 2.2))
+        v = (1 - r) * x[i] + 2 * r * np.cos(w) * y1 - r * r * y2
+        y2, y1 = y1, v; silk[i] = v
+    silk *= 0.75 + 0.25 * cyc(2, j(0, 6))
 
-    crackle = np.zeros(n)
-    for k in np.nonzero(rng.random(n) < 110 / SR)[0]:
-        m = min(n - k, 60)
-        crackle[k:k + m] += rng.uniform(-1, 1) * np.exp(-np.arange(m) / 6)
-    crackle = hp(crackle, 2400, 2)
+    # strain: a soft resonant band in the mids that swells and eases
+    sf = j(650, 900)
+    strain = resonator(rng.standard_normal(n), sf, sf, j(3.5, 5.0), 1.0)
+    strain *= 0.6 + 0.4 * (0.5 + 0.5 * cyc(1, j(0, 6))) ** 2
 
-    mix = norm(creak, 0) + norm(crackle, 0) * 0.3
-    mix = lp(hp(mix, 250), 8000)
+    # fibers: a faint fine fizz
+    fib = np.zeros(n)
+    for k in np.nonzero(rng.random(n) < j(30, 50) / SR)[0]:
+        m = min(n - k, 40)
+        fib[k:k + m] += rng.uniform(-1, 1) * np.exp(-np.arange(m) / 4)
+    fib = hp(fib, 4000, 2)
+
+    # give: a couple of tiny, soft, high creaks
+    give = np.zeros(n)
+    for _ in range(rng.integers(1, 3)):
+        at = j(0.1, loop_s - 0.2); length = j(0.03, 0.06); body = j(2000, 3000); pos = 0.0
+        while pos < length:
+            k = int((at + pos) * SR); m = min(n - k, 300); tt = np.arange(m) / SR
+            give[k:k + m] += np.sin(2 * np.pi * body * tt) * np.exp(-tt / 0.0015) * np.sin(np.pi * pos / length)
+            pos += 1 / j(90, 140)
+
+    mix = norm(silk, 0) * 0.8 + norm(strain, 0) * 0.45 + norm(fib, 0) * 0.12 + norm(give, 0) * 0.2
+    mix = lp(hp(mix, 300), 11000)
     L, X = int(loop_s * SR), int(xfade_s * SR)
     out = mix[:L].copy()
     w = np.linspace(0, 1, X)
@@ -300,7 +317,8 @@ def tension_loop(seed, loop_s=2.0, xfade_s=0.3):
     return norm(out, -6)
 
 
-save('WebTension.wav', tension_loop(4200))
+for i, seed in enumerate([4310, 4311, 4312], 1):
+    save(f'WebTension{i}.wav', tension_loop(seed))
 
 
 # ---------------------------------------------------------------- falling scream

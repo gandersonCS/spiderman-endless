@@ -56,7 +56,8 @@ public sealed class GameAudio
     private float _whooshLevel;           // 0 to 1: how much of the whoosh this swing has earned
     private float _whooshPitch;           // a little random pitch per whoosh, so they don't repeat exactly
 
-    private readonly SoundEffect _tensionSound;
+    private readonly SoundEffect[] _tensionSounds;
+    private int _lastTension = -1;
     private SoundEffectInstance _tension;
     private float _tensionLevel;          // current fade level, 0 to 1
 
@@ -81,8 +82,8 @@ public sealed class GameAudio
     /// </summary>
     private const float SlowSwingSpeed = 300f, FastSwingSpeed = 900f;
 
-    /// <summary>How loud the tension loop is, 0 to 1</summary>
-    private const float TensionVolume = 0.8f;
+    /// <summary>How loud the tension loop is, 0 to 1 (a quiet bed under the swing)</summary>
+    private const float TensionVolume = 0.45f;
 
     /// <summary>
     /// How quickly the tension fades in when the web connects, and out when it lets go (seconds).
@@ -100,7 +101,7 @@ public sealed class GameAudio
     private static readonly TimeSpan EssenceStreakWindow = TimeSpan.FromSeconds(0.5);
 
     /// <summary>The chance the "no!" scream plays on top of the hit when he dies</summary>
-    private const double ScreamChance = 1.0 / 8.0;
+    private const double ScreamChance = 1.0 / 4.0;
 
     /// <param name="audio">The audio manager</param>
     /// <param name="content">Loads the sounds; they stay loaded while the game runs</param>
@@ -159,9 +160,15 @@ public sealed class GameAudio
             content.Load<SoundEffect>("Audio/Sfx/WebWhoosh4"),
         };
 
-        // the steady creak and fiber crackle of the web pulled taut, looped while it's attached
-        // (see UpdateSwingSounds)
-        _tensionSound = content.Load<SoundEffect>("Audio/Sfx/WebTension");
+        // the web pulled taut, looped while it's attached: silky and tough (a smooth fiber shimmer,
+        // a soft strained "eee" and the odd tiny creak) rather than a creaking rope. each swing
+        // picks a different one of these (see UpdateSwingSounds)
+        _tensionSounds = new[]
+        {
+            content.Load<SoundEffect>("Audio/Sfx/WebTension1"),
+            content.Load<SoundEffect>("Audio/Sfx/WebTension2"),
+            content.Load<SoundEffect>("Audio/Sfx/WebTension3"),
+        };
 
         // no random pitch here: the streak sets the pitch so the climb sounds like a clean scale
         // a short bright "point": the bubble's pop pitched up, with a gem sparkle (old one: Sfx/Pickup4)
@@ -425,7 +432,7 @@ public sealed class GameAudio
         _tensionLevel = Math.Clamp(_tensionLevel + (connected ? step : -step), 0f, 1f);
         if (_tensionLevel > 0f && _tension == null)
         {
-            _tension = _tensionSound.CreateInstance();
+            _tension = _tensionSounds[PickOther(_tensionSounds.Length, ref _lastTension)].CreateInstance();
             _tension.IsLooped = true;
             _tension.Volume = 0f;
             _tension.Play();
@@ -452,15 +459,24 @@ public sealed class GameAudio
     private void StartWhoosh()
     {
         _whoosh?.Dispose();
-        int pick = _random.Next(_whooshSounds.Length - 1);
-        if (pick >= _lastWhoosh && _lastWhoosh >= 0)
-            pick++;
-        _lastWhoosh = pick;
-        _whoosh = _whooshSounds[pick].CreateInstance();
+        _whoosh = _whooshSounds[PickOther(_whooshSounds.Length, ref _lastWhoosh)].CreateInstance();
         _whooshLevel = 0f;
         _whooshPitch = (float)(_random.NextDouble() * 0.12 - 0.06);
         _whoosh.Volume = 0f;
         _whoosh.Play();
+    }
+
+    /// <summary>
+    /// Picks a random index from 0 to count - 1 that isn't the one picked last time, and remembers it
+    /// </summary>
+    private int PickOther(int count, ref int last)
+    {
+        if (count <= 1)
+            return last = 0;
+        int pick = last < 0 ? _random.Next(count) : _random.Next(count - 1);
+        if (last >= 0 && pick >= last)
+            pick++;
+        return last = pick;
     }
 
     private static void Pause(SoundEffectInstance instance)

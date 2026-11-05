@@ -12,7 +12,7 @@ Sources and licenses for everything in here are in the top-level `ASSETS.md`.
 | `Sfx/ui_move.wav` | Old menu-move placeholder from the starter, not played anymore |
 | `Sfx/EssencePickup.wav` | Spider-Essence pickup (bubble bloop + gem sparkle), pitch climbs per streak |
 | `Sfx/WebThwip1-4.wav` | Web shot, four variations designed in Thwip Lab (click, spray, zip, splat); settings in `Sfx_Originals/thwip-settings.json` |
-| `Sfx/WebTension.wav` | Seamless loop of the web strained like a rope (steady stick-slip creak + fiber crackle), plays only while the web is attached |
+| `Sfx/WebTension1-3.wav` | Seamless loops of the web pulled taut (silky fiber shimmer + soft strain + rare tiny creak), one picked per swing, plays only while the web is attached. `WebTension.wav` is the older rope version, no longer played |
 | `Sfx/ScreamFall.wav` | The "no!" scream processed to fall away (pitch drops, muffles, echoes out); the original is `spiderman-screaming-no.mp3` |
 | `Sfx/NimbleJump1-5.wav` | Jump: low push-off thump + shoe scuff + cloth flick (synthesized; replaced `Jump.wav`) |
 | `Sfx/WebWhoosh1-4.wav` | Soft swoosh of the swing, starts as the web connects, louder the longer and faster he swings (synthesized; replaced the louder `AirDash.wav`) |

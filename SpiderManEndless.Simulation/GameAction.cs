@@ -11,8 +11,14 @@ namespace SpiderManEndless.Simulation;
 public enum GameAction
 {
     /// <summary>
-    /// The only button. Jump (hold to go higher), keep holding in the air to swing, and press it
-    /// after dying to restart.
+    /// The only button. Jump (hold to go higher), press again in the air and hold to swing, and
+    /// press it after dying to restart.
     /// </summary>
     Jump = 0,
+
+    /// <summary>
+    /// Attack (left click). Which attack he does depends on what he's doing: a jab punch on a
+    /// roof, an upward kick while rising, an air kick while falling. See <see cref="AttackKind"/>.
+    /// </summary>
+    Attack = 1,
 }

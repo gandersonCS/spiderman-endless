@@ -18,28 +18,34 @@ public static class DefaultControls
 {
     private static KeyBinding Key(Keys key) => new(key);
     private static GamePadButtonBinding Button(Buttons button) => new(button);
+    private static MouseButtonBinding Mouse(MouseButton button) => new(button);
 
     /// <summary>
-    /// The whole keyboard, for a player who isn't sharing it. Jump is Space or A (no mouse clicks)
+    /// The whole keyboard and mouse, for a player who isn't sharing it. Jump is Space or A,
+    /// attack is a left click
     /// </summary>
     public static ControlScheme Keyboard() => StandardSchemes.Keyboard()
-        .Bind(nameof(GameAction.Jump), Key(Keys.Space), Key(Keys.A));
+        .Bind(nameof(GameAction.Jump), Key(Keys.Space), Key(Keys.A))
+        .Bind(nameof(GameAction.Attack), Mouse(MouseButton.Left));
 
     /// <summary>
     /// The left side of a shared keyboard
     /// </summary>
     public static ControlScheme KeyboardLeft() => StandardSchemes.KeyboardLeft()
-        .Bind(nameof(GameAction.Jump), Key(Keys.Space));
+        .Bind(nameof(GameAction.Jump), Key(Keys.Space))
+        .Bind(nameof(GameAction.Attack), Key(Keys.F));
 
     /// <summary>
     /// The right side of a shared keyboard
     /// </summary>
     public static ControlScheme KeyboardRight() => StandardSchemes.KeyboardRight()
-        .Bind(nameof(GameAction.Jump), Key(Keys.Enter));
+        .Bind(nameof(GameAction.Jump), Key(Keys.Enter))
+        .Bind(nameof(GameAction.Attack), Key(Keys.RightShift));
 
     /// <summary>
     /// A gamepad
     /// </summary>
     public static ControlScheme GamePad() => StandardSchemes.GamePad()
-        .Bind(nameof(GameAction.Jump), Button(Buttons.A), new GamePadAxisBinding(GamePadAxis.RightTrigger));
+        .Bind(nameof(GameAction.Jump), Button(Buttons.A), new GamePadAxisBinding(GamePadAxis.RightTrigger))
+        .Bind(nameof(GameAction.Attack), Button(Buttons.X));
 }

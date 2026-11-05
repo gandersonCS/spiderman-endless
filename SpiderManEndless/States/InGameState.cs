@@ -94,7 +94,8 @@ public sealed class InGameState : AppState, ILoadable
         _gameFont = _content.Load<SpriteFont>("Fonts/gamefont");
         _tileset = _content.Load<Texture2D>("Textures/tileset_city_free");
         _backdrop = new CityBackdrop(_content);
-        _spidey = _content.Load<Texture2D>("Textures/spiderman");
+        // whichever suit is equipped in the Closet (all suits share the same frame layout)
+        _spidey = _content.Load<Texture2D>(Costumes.Equipped(services.GetService<SaveFile>()).SpriteSheet);
         yield return 0.5f;
 
         _pausePolicy = services.GetService<PausePolicy>() ?? new PausePolicy();

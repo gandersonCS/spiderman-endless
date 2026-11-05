@@ -34,6 +34,13 @@ all related characters belong to Marvel. It's not for sale and isn't meant to be
 - `Textures/Game Boy Advance - Spider-Man_ The Movie - Playable Characters - Spider-Man.png` -
   the original unedited sheet from the same link. Not loaded by the game.
 
+- `Textures/spiderman_symbiote.png` - Symbiote Suit costume. A recolor of `spiderman.png`
+  (generated with a script: red/blue suit colors remapped to black with silver highlights, silver
+  lenses, motion trails turned silver, and a small white spider logo hand-placed on the chest of every
+  frame the game draws). Same source/license as `spiderman.png`.
+- `Textures/suit_classic.png`, `Textures/suit_symbiote.png` - costume card artwork shown in the
+  Closet's Outfits screen, cropped and scaled down from reference images I supplied. Source: TODO.
+
 - `Textures/background.png` (submenu background) and `Textures/gradient.png` (message box fill) -
   procedurally generated placeholders that came with the starter project, public domain.
 
@@ -78,7 +85,7 @@ loops (procedurally generated, public domain). They still get built but the game
 - `Audio/Sfx/EssencePickup.wav` - the main pop of `bubbles-single1.wav`, pitched up a fifth, layered
   with a high-passed `gem-gather-orig.wav`. Sources and licenses: TODO.
 - `Audio/Sfx/ui_blip.wav` - trimmed from `beep.wav`. Source and license: TODO.
-- `Audio/Sfx/WebWhoosh1-4.wav`, `NimbleJump1-5.wav` and `WebTension.wav` - synthesized from scratch with
+- `Audio/Sfx/WebWhoosh1-4.wav`, `NimbleJump1-5.wav`, `WebTension.wav` and `WebTension1-3.wav` - synthesized from scratch with
   `Sfx_Originals/build_sfx.py` (filtered noise and sine sweeps), no samples, made for this project.
 - `Audio/Sfx/WebThwip1-4.wav` - designed by me in Thwip Lab, a synthesizer page Claude built for this project
   (all synthesized, no samples). The settings are saved in `Audio/Sfx_Originals/thwip-settings.json`.

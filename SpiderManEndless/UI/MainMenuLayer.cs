@@ -5,6 +5,7 @@ using CIS580.Input;
 using CIS580.UI;
 using CIS580.UI.Widgets;
 using CIS580.Views;
+using SpiderManEndless.Settings;
 
 namespace SpiderManEndless.UI;
 
@@ -40,12 +41,13 @@ public class MainMenuLayer : MenuLayer
         "Quit to desktop",
     };
 
-
     private readonly Action _onExit;
     private readonly MenuSpiderMan _spiderMan = new();
     private readonly float[] _fade;
     private Texture2D _skyline;
     private Texture2D _spidey;
+    private SaveFile _save;
+    private Costume _costume;
     private SpriteFont _buttonFont;
     private float _clock;
 
@@ -69,8 +71,18 @@ public class MainMenuLayer : MenuLayer
     {
         base.Load();
         _skyline = Game.Content.Load<Texture2D>("Textures/background_tileset_city_free");
-        _spidey = Game.Content.Load<Texture2D>("Textures/spiderman");
+        _save = Game.Services.GetService<SaveFile>();
+        LoadCostume();
         _buttonFont = Game.Content.Load<SpriteFont>("Fonts/buttonfont");    // Action Comics Black
+    }
+
+    /// <summary>
+    /// Loads the sprite sheet for whichever suit is equipped (it can change in the Closet)
+    /// </summary>
+    private void LoadCostume()
+    {
+        _costume = Costumes.Equipped(_save);
+        _spidey = Game.Content.Load<Texture2D>(_costume.SpriteSheet);
     }
 
     /// <summary>
@@ -88,6 +100,8 @@ public class MainMenuLayer : MenuLayer
         base.Update(gameTime);
         _clock = (float)gameTime.TotalGameTime.TotalSeconds;
         _spiderMan.Update(gameTime);
+        if (_save != null && Costumes.Equipped(_save) != _costume)
+            LoadCostume();
 
         // highlight fades in/out as you move the selection
         float step = (float)gameTime.ElapsedGameTime.TotalSeconds * 8;
