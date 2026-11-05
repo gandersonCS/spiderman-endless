@@ -41,6 +41,9 @@ public sealed class Menu
     /// </summary>
     public int FirstVisibleIndex { get; private set; }
 
+    // Where each item was last drawn on screen, so the mouse can point at and click items
+    private readonly Dictionary<MenuItem, Rectangle> _itemBounds = new();
+
     /// <summary>
     /// Adds an item, returning this menu so calls can be chained
     /// </summary>
@@ -81,6 +84,85 @@ public sealed class Menu
     }
 
     /// <summary>
+    /// Responds to the mouse: pointing at an item selects it, left-clicking chooses it (like
+    /// Confirm), right-clicking adjusts it backwards (like Left), and the scroll wheel moves the
+    /// selection. Items are found where they were last drawn (see <see cref="SetItemBounds"/>).
+    /// </summary>
+    /// <param name="input">The state of the input devices</param>
+    /// <param name="theme">The UI theme (for sounds)</param>
+    /// <param name="source">Who the mouse counts as; if null, the mouse is ignored</param>
+    /// <returns>True if an item was clicked</returns>
+    public bool HandleMouse(InputState input, UiTheme theme, InputSource source)
+    {
+        if (Items.Count == 0 || source == null)
+            return false;
+
+        int wheel = input.ScrollWheelDelta;
+        if (wheel != 0)
+            MoveSelection(wheel > 0 ? -1 : 1, theme);
+
+        int hovered = IndexAt(input.MousePosition);
+        if (hovered < 0 || !Items[hovered].IsEnabled)
+            return false;
+
+        if (input.MouseMoved && hovered != SelectedIndex)
+        {
+            SelectedIndex = hovered;
+            theme.Sounds.Play(UiSound.Move);
+        }
+
+        var item = Items[hovered];
+        if (input.WasLeftClicked)
+        {
+            SelectedIndex = hovered;
+            theme.Sounds.Play(UiSound.Confirm);
+            item.Activate(source);
+            return true;
+        }
+        if (input.WasRightClicked)
+        {
+            SelectedIndex = hovered;
+            if (item.Adjust(-1, source))
+                theme.Sounds.Play(UiSound.Move);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The index of the (visible) item at a point on screen, or -1 if there isn't one
+    /// </summary>
+    public int IndexAt(Point point)
+    {
+        for (int i = 0; i < Items.Count; i++)
+        {
+            if (_itemBounds.TryGetValue(Items[i], out var bounds) && bounds.Contains(point))
+                return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Determines if the mouse is over an item that can be clicked
+    /// </summary>
+    public bool IsClickableAt(Point point)
+    {
+        int index = IndexAt(point);
+        return index >= 0 && Items[index].IsEnabled;
+    }
+
+    /// <summary>
+    /// Records where an item is on screen, for the mouse. <see cref="Draw"/> does this itself;
+    /// call it when drawing the items some other way (after <see cref="ClearItemBounds"/>).
+    /// </summary>
+    public void SetItemBounds(MenuItem item, Rectangle bounds) => _itemBounds[item] = bounds;
+
+    /// <summary>
+    /// Forgets where the items are (e.g. before drawing them again)
+    /// </summary>
+    public void ClearItemBounds() => _itemBounds.Clear();
+
+    /// <summary>
     /// Animates the selection highlight
     /// </summary>
     /// <param name="gameTime">The game time</param>
@@ -112,6 +194,7 @@ public sealed class Menu
         float pulse = (float)Math.Sin(gameTime.TotalGameTime.TotalSeconds * 6) + 1;
 
         int visible = ScrollToSelection();
+        ClearItemBounds();
 
         var position = new Vector2(topCenter.X + slide, topCenter.Y + font.LineSpacing / 2f);
         var markerColor = theme.DisabledColor * transition.Alpha;
@@ -130,6 +213,11 @@ public sealed class Menu
 
             spriteBatch.DrawString(font, text, position, color * transition.Alpha, 0, origin, scale,
                 SpriteEffects.None, 0);
+
+            // the clickable area: the item's whole row, a little wider than its text
+            float clickWidth = Math.Max(origin.X * 2, 120) + 40;
+            SetItemBounds(item, new Rectangle((int)(position.X - clickWidth / 2), (int)(position.Y - font.LineSpacing / 2f),
+                (int)clickWidth, font.LineSpacing));
 
             position.Y += font.LineSpacing;
         }

@@ -170,6 +170,9 @@ public abstract class Layer
 
         var viewport = Game.GraphicsDevice.Viewport;
         var font = Theme.TextFont;
+
+        // wrap long messages so the panel stays on screen
+        text = TextLayout.Wrap(font, text, viewport.Width - 48 - Theme.PanelPadding.X * 2);
         var textSize = font.MeasureString(text);
         var textPosition = (new Vector2(viewport.Width, viewport.Height) - textSize) / 2;
 

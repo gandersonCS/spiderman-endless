@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using CIS580.UI;
 using CIS580.Views;
 using SpiderManEndless.Settings;
 using SpiderManEndless.Simulation;
@@ -48,6 +49,24 @@ public class WorldView : WorldLayer
     private static readonly Color NotSavedColor = new(255, 140, 130);
     private static readonly Color CantAffordColor = new(255, 140, 130);
     private static readonly Color ContinueColor = new(120, 215, 255);
+    private static readonly Color EndPanelColor = new(13, 19, 32);
+    private static readonly Color AccentColor = new(232, 72, 60);
+
+    // text sizes (scales of the game font), picked so everything is readable at 800x480
+    private const float HintScale = 0.5f;
+    private const float TitleScale = 1.15f;
+    private const float DistanceScale = 0.85f;
+    private const float BestScale = 0.6f;
+    private const float SummaryScale = 0.55f;
+    private const float SmallScale = 0.45f;
+    private const float ButtonTextScale = 0.5f;
+
+    // end-of-run panel and its buttons (world units, which are pixels at the default window size)
+    private const float EndPanelWidth = 600;
+    private const float EndPanelPadding = 16;
+    private const float ButtonHeight = 42;
+    private const float ContinueButtonWidth = 300;
+    private const float MenuButtonWidth = 180;
 
     // orb settings in world units: core radius + bob/spin
     private const float OrbRadius = 5f;
@@ -60,7 +79,7 @@ public class WorldView : WorldLayer
     private readonly List<Burst> _bursts = new();
 
     // essence icon next to the counter (under the distance)
-    private static readonly Vector2 EssenceIconCenter = new(30, 68);
+    private static readonly Vector2 EssenceIconCenter = new(26, 70);
     private const float EssenceIconRadius = 7f;
 
     private readonly GameSession _session;
@@ -69,6 +88,10 @@ public class WorldView : WorldLayer
     private readonly CityBackdrop _backdrop;
     private readonly Texture2D _spidey;
     private readonly SaveFile _save;
+    private readonly Func<bool> _canContinue;
+    private readonly Func<bool> _buttonsActive;
+    private Rectangle? _continueButton;
+    private Rectangle? _menuButton;
     private EssenceArt _essenceArt;
     private RunRecord? _runRecord;
     private Runner _recordedRunner;
@@ -82,9 +105,13 @@ public class WorldView : WorldLayer
     /// <param name="backdrop">The parallax city behind the rooftops (day/dusk/night)</param>
     /// <param name="spidey">Textures/spiderman (sprite sheet with the background removed)</param>
     /// <param name="save">The player's progress, for showing how much Spider-Essence they have toward a continue</param>
+    /// <param name="canContinue">Whether the player can continue right now (has continues left and can pay)</param>
+    /// <param name="buttonsActive">Whether the end screen's buttons can be clicked right now (e.g. not while paused)</param>
     public WorldView(GameSession session, SpriteFont font, Texture2D tileset, CityBackdrop backdrop, Texture2D spidey,
-        SaveFile save = null)
+        SaveFile save = null, Func<bool> canContinue = null, Func<bool> buttonsActive = null)
     {
+        _canContinue = canContinue ?? (() => session.World.CanContinue);
+        _buttonsActive = buttonsActive ?? (() => true);
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _font = font;
         _tileset = tileset;
@@ -110,6 +137,17 @@ public class WorldView : WorldLayer
         base.Load();
         _essenceArt = EssenceArt.For(Game.GraphicsDevice);
     }
+
+    /// <summary>
+    /// Where the end screen's Continue button is on screen, or null if it isn't showing.
+    /// (It shows greyed out when the player can't continue; check that before acting on a click.)
+    /// </summary>
+    public Rectangle? ContinueButton => _session.World.Runner.State == RunnerState.Dead ? _continueButton : null;
+
+    /// <summary>
+    /// Where the end screen's Main Menu button is on screen, or null if it isn't showing
+    /// </summary>
+    public Rectangle? MenuButton => _session.World.Runner.State == RunnerState.Dead ? _menuButton : null;
 
     /// <summary>
     /// Handles sim events - right now just spawns a burst where an orb was picked up.
@@ -152,6 +190,10 @@ public class WorldView : WorldLayer
 
         if (_backdrop != null)
             BackgroundColor = _backdrop.FillColor(_session.World.Track.DistanceMeters);
+
+        // pointing at a button that can be clicked shows the hand pointer
+        if (IsHovered(MenuButton) || (_canContinue() && IsHovered(ContinueButton)))
+            Stack.RequestHandCursor();
 
         base.Update(gameTime);
     }
@@ -353,101 +395,157 @@ public class WorldView : WorldLayer
         if (_font == null)
             return;
 
-        SpriteBatch.DrawString(_font, $"{track.DistanceMeters:0} m", new Vector2(16, 12), Color.White);
+        // text is drawn scaled, so it needs smooth (linear) sampling or it gets jagged and hard to read
+        Rebegin(camera, BlendState.AlphaBlend, SamplerState.LinearClamp);
+
+        DrawOutlined($"{track.DistanceMeters:0} m", new Vector2(16, 8), Vector2.Zero, Color.White, 0.9f);
 
         // essence count for this run + icon, right below the distance
         int essence = _session.World.Essence.CollectedThisRun;
-        var countPosition = new Vector2(EssenceIconCenter.X + EssenceIconRadius + 12, EssenceIconCenter.Y);
-        var countOrigin = new Vector2(0, _font.MeasureString("0").Y / 2);
-        SpriteBatch.DrawString(_font, essence.ToString(), countPosition + new Vector2(2, 2), Color.Black * 0.45f, 0,
-            countOrigin, 0.75f, SpriteEffects.None, 0);
-        SpriteBatch.DrawString(_font, essence.ToString(), countPosition, Color.White, 0, countOrigin, 0.75f,
-            SpriteEffects.None, 0);
+        var countPosition = new Vector2(EssenceIconCenter.X + EssenceIconRadius + 10, EssenceIconCenter.Y);
+        DrawOutlined(essence.ToString(), countPosition, new Vector2(0, _font.LineSpacing / 2f), Color.White, 0.65f);
         DrawEssenceIcon(camera, EssenceIconCenter, EssenceIconRadius);
 
-        // controls hint at the start of a run
+        // controls hint at the start of a run (two short lines, so it fits on screen)
         if (runner.State != RunnerState.Dead && track.DistanceMeters < 80)
         {
-            const string help = "SPACE / A: jump (hold = higher)     keep holding in the air to swing";
-            DrawCentered(help, new Vector2(World.Width / 2, World.Height - 28), Color.White * 0.9f, 0.6f);
+            DrawCentered("SPACE / A: jump  (hold to jump higher)", new Vector2(World.Width / 2, World.Height - 62),
+                Color.White, HintScale);
+            DrawCentered("Keep holding in the air to web-swing", new Vector2(World.Width / 2, World.Height - 32),
+                Color.White, HintScale);
         }
 
+        _continueButton = null;
+        _menuButton = null;
         if (runner.State == RunnerState.Dead)
-        {
-            string why = runner.EndReason == RunEndReason.Fell ? "You fell!" : "You hit a building!";
-            DrawCentered(why, new Vector2(World.Width / 2, 130), Color.White, 1.6f);
-            DrawCentered($"{track.DistanceMeters:0} m", new Vector2(World.Width / 2, 182), Color.White, 1.1f);
+            DrawEndScreen(camera, track, runner);
 
-            if (_runRecord is RunRecord record)
-                DrawRunSummary(camera, record);
-
-            DrawContinuePrompt();
-        }
+        Rebegin(camera, BlendState.AlphaBlend, SamplerState.PointClamp);
     }
 
     /// <summary>
-    /// What you can do after dying: continue (what it costs, whether you can afford it, how many
-    /// are left) or go back to the main menu with Esc
+    /// The end-of-run screen: a panel with why the run ended, how far it got, the save summary,
+    /// and buttons to continue (with what it costs) or go back to the main menu. The buttons
+    /// can be clicked; the game state checks <see cref="ContinueButton"/> and <see cref="MenuButton"/>.
     /// </summary>
-    private void DrawContinuePrompt()
+    private void DrawEndScreen(Camera2D camera, RooftopTrack track, Runner runner)
     {
         const float centerX = World.Width / 2;
+        float line = _font.LineSpacing;
         var world = _session.World;
         int have = _save?.Data.SpiderEssence ?? 0;
+        bool canContinue = _canContinue();
 
+        // work out the panel's height first, so it can be centered on screen
+        var record = _runRecord;
+        float contentHeight = line * TitleScale + line * DistanceScale
+                              + (record != null ? line * (BestScale + SummaryScale + SmallScale) : 0)
+                              + 14 + ButtonHeight + 10 + line * SmallScale + 4 + line * SmallScale;
+        var panel = new RectangleF(centerX - EndPanelWidth / 2, MathF.Round((World.Height - contentHeight) / 2 - EndPanelPadding),
+            EndPanelWidth, contentHeight + EndPanelPadding * 2);
+
+        Fill(panel, EndPanelColor * 0.82f);
+        Fill(new RectangleF(panel.X, panel.Y, panel.Width, 3), AccentColor);
+
+        float y = panel.Y + EndPanelPadding;
+        string why = runner.EndReason == RunEndReason.Fell ? "You fell!" : "You hit a building!";
+        y = DrawTextLine(why, y, Color.White, TitleScale);
+        y = DrawTextLine($"{track.DistanceMeters:0} m", y, Color.White, DistanceScale);
+
+        if (record is RunRecord saved)
+        {
+            if (saved.NewHighScore)
+                y = DrawTextLine("NEW BEST!", y, NewBestColor, BestScale);
+            else
+                y = DrawTextLine($"Best: {saved.HighScoreMeters} m", y, Color.White * 0.85f, BestScale);
+
+            // e.g. "+12 Spider-Essence (340 total)" with the icon in front
+            string text = $"+{saved.EssenceCollected} Spider-Essence  ({saved.TotalEssence} total)";
+            float textWidth = _font.MeasureString(text).X * SummaryScale;
+            const float iconRadius = 6f, gap = 10f;
+            float startX = centerX - (iconRadius * 2 + gap + textWidth) / 2;
+            float middle = y + line * SummaryScale / 2;
+            DrawCentered(text, new Vector2(startX + iconRadius * 2 + gap + textWidth / 2, middle), Color.White, SummaryScale);
+            DrawEssenceIcon(camera, new Vector2(startX + iconRadius, middle), iconRadius);
+            y += line * SummaryScale;
+
+            y = DrawTextLine(saved.Saved ? "Progress saved" : "Couldn't save progress", y,
+                saved.Saved ? SavedColor : NotSavedColor, SmallScale);
+        }
+
+        // the two buttons, side by side
+        y += 14;
+        const float buttonGap = 20;
+        float left = centerX - (ContinueButtonWidth + buttonGap + MenuButtonWidth) / 2;
+        var continueArea = new RectangleF(left, y, ContinueButtonWidth, ButtonHeight);
+        var menuArea = new RectangleF(left + ContinueButtonWidth + buttonGap, y, MenuButtonWidth, ButtonHeight);
+        _continueButton = ToScreen(camera, continueArea);
+        _menuButton = ToScreen(camera, menuArea);
+
+        string continueLabel = world.CanContinue ? $"CONTINUE  -  {world.NextContinueCost} ESSENCE" : "NO CONTINUES LEFT";
+        DrawButton(continueArea, continueLabel, ContinueColor, canContinue, IsHovered(_continueButton));
+        DrawButton(menuArea, "MAIN MENU", Color.White, enabled: true, IsHovered(_menuButton));
+        y += ButtonHeight + 10;
+
+        // what the keys do, then how many continues are left / why you can't continue
+        y = DrawTextLine(canContinue ? "SPACE / A: continue      ESC: main menu" : "ESC: main menu", y,
+            Color.White * 0.75f, SmallScale);
+        y += 4;
         if (!world.CanContinue)
-        {
-            DrawCentered("No continues left this run", new Vector2(centerX, 338), CantAffordColor, 0.7f);
-        }
+            DrawTextLine("No continues left this run", y, CantAffordColor, SmallScale);
         else if (_save != null && have < world.NextContinueCost)
-        {
-            DrawCentered($"Not enough Spider-Essence to continue ({have} / {world.NextContinueCost})",
-                new Vector2(centerX, 338), CantAffordColor, 0.6f);
-        }
+            DrawTextLine($"Not enough Spider-Essence to continue ({have} / {world.NextContinueCost})", y, CantAffordColor, SmallScale);
         else
-        {
-            DrawCentered($"SPACE / A: Continue  -  {world.NextContinueCost} Spider-Essence",
-                new Vector2(centerX, 338), ContinueColor, 0.75f);
-        }
-
-        if (world.CanContinue)
-        {
-            DrawCentered($"{world.ContinuesLeft} of {World.MaxContinues} continues left   |   You have {have}",
-                new Vector2(centerX, 372), Color.White * 0.8f, 0.5f);
-        }
-
-        DrawCentered("ESC: Main menu", new Vector2(centerX, 410), Color.White * 0.9f, 0.6f);
+            DrawTextLine($"{world.ContinuesLeft} of {World.MaxContinues} continues left   |   You have {have} Spider-Essence",
+                y, Color.White * 0.8f, SmallScale);
     }
 
-    /// <summary>
-    /// End-of-run summary: best distance, essence banked, and whether it saved
-    /// </summary>
-    private void DrawRunSummary(Camera2D camera, RunRecord record)
+    private void DrawButton(RectangleF area, string label, Color textColor, bool enabled, bool hovered)
     {
-        const float centerX = World.Width / 2;
+        hovered &= enabled;
+        Fill(area, (hovered ? AccentColor * 0.45f : Color.Black * 0.45f));
+        var edge = !enabled ? Color.Gray * 0.5f : hovered ? AccentColor : Color.White * 0.55f;
+        Fill(new RectangleF(area.X, area.Y, area.Width, 2), edge);
+        Fill(new RectangleF(area.X, area.Y + area.Height - 2, area.Width, 2), edge);
+        Fill(new RectangleF(area.X, area.Y, 2, area.Height), edge);
+        Fill(new RectangleF(area.X + area.Width - 2, area.Y, 2, area.Height), edge);
 
-        if (record.NewHighScore)
-            DrawCentered("NEW BEST!", new Vector2(centerX, 220), NewBestColor, 0.8f);
-        else
-            DrawCentered($"Best: {record.HighScoreMeters} m", new Vector2(centerX, 220), Color.White * 0.85f, 0.6f);
-
-        // e.g. "+12 Spider-Essence (340 total)" with the icon in front
-        string essence = $"+{record.EssenceCollected} Spider-Essence  ({record.TotalEssence} total)";
-        const float essenceScale = 0.6f;
-        float textWidth = _font.MeasureString(essence).X * essenceScale;
-        const float iconRadius = 6f, gap = 10f;
-        float startX = centerX - (iconRadius * 2 + gap + textWidth) / 2;
-        DrawCentered(essence, new Vector2(startX + iconRadius * 2 + gap + textWidth / 2, 258), Color.White, essenceScale);
-
-        string saved = record.Saved ? "Progress saved" : "Couldn't save progress";
-        DrawCentered(saved, new Vector2(centerX, 292), record.Saved ? SavedColor : NotSavedColor, 0.5f);
-
-        DrawEssenceIcon(camera, new Vector2(startX + iconRadius, 258), iconRadius);
+        // centered on the letters themselves, so it sits in the middle of the button
+        var color = !enabled ? Color.Gray : hovered ? Color.White : textColor;
+        float scale = TextLayout.FitScale(_font, label, area.Width - 16, ButtonTextScale);
+        float width = _font.MeasureString(label).X * scale;
+        var position = new Vector2(MathF.Round(area.X + (area.Width - width) / 2),
+            TextLayout.CenteredTop(_font, label, area.Y + area.Height / 2, scale));
+        DrawOutlined(label, position, Vector2.Zero, color, scale);
     }
 
     /// <summary>
-    /// Draws the essence icon (pair of slowly spinning orbs). Puts the batch back the way it was
-    /// afterwards (point sampled, alpha blended).
+    /// Draws a centered line of text with its top at <paramref name="top"/>, returning where the next line goes
+    /// </summary>
+    private float DrawTextLine(string text, float top, Color color, float scale)
+    {
+        float height = _font.LineSpacing * scale;
+        DrawCentered(text, new Vector2(World.Width / 2, top + height / 2), color, scale, maxWidth: EndPanelWidth - 32);
+        return top + height;
+    }
+
+    private bool IsHovered(Rectangle? button)
+        => button is Rectangle bounds && _buttonsActive() && Game.IsActive && bounds.Contains(Input.MousePosition);
+
+    private static Rectangle ToScreen(Camera2D camera, RectangleF area)
+    {
+        var topLeft = camera.WorldToScreen(new Vector2(area.X, area.Y));
+        var bottomRight = camera.WorldToScreen(new Vector2(area.X + area.Width, area.Y + area.Height));
+        return new Rectangle((int)topLeft.X, (int)topLeft.Y, (int)(bottomRight.X - topLeft.X), (int)(bottomRight.Y - topLeft.Y));
+    }
+
+    private void Fill(RectangleF area, Color color)
+        => SpriteBatch.Draw(Stack.BlankTexture, new Vector2(area.X, area.Y), null, color, 0, Vector2.Zero,
+            new Vector2(area.Width, area.Height), SpriteEffects.None, 0);
+
+    /// <summary>
+    /// Draws the essence icon (pair of slowly spinning orbs). Puts the batch back the way the
+    /// text drawing uses it afterwards (linear sampled, alpha blended).
     /// </summary>
     private void DrawEssenceIcon(Camera2D camera, Vector2 center, float radius)
     {
@@ -459,13 +557,20 @@ public class WorldView : WorldLayer
         _essenceArt.DrawGlow(SpriteBatch, center, radius, spin, alpha: 0.9f);
         Rebegin(camera, BlendState.AlphaBlend, SamplerState.LinearClamp);
         _essenceArt.DrawCores(SpriteBatch, center, radius, spin);
-        Rebegin(camera, BlendState.AlphaBlend, SamplerState.PointClamp);
     }
 
-    private void DrawCentered(string text, Vector2 position, Color color, float scale)
+    /// <summary>
+    /// Draws text centered on a point, with a dark outline. It shrinks if it would be wider than
+    /// <paramref name="maxWidth"/> (by default, the screen minus a margin), so it never runs off screen.
+    /// </summary>
+    private void DrawCentered(string text, Vector2 position, Color color, float scale, float maxWidth = World.Width - 40)
     {
-        var size = _font.MeasureString(text);
-        var origin = size / 2;
+        scale = TextLayout.FitScale(_font, text, maxWidth, scale);
+        DrawOutlined(text, position, _font.MeasureString(text) / 2, color, scale);
+    }
+
+    private void DrawOutlined(string text, Vector2 position, Vector2 origin, Color color, float scale)
+    {
         // dark outline so text is readable on any background
         foreach (var offset in new[] { new Vector2(-2, 0), new Vector2(2, 0), new Vector2(0, -2), new Vector2(0, 2) })
             SpriteBatch.DrawString(_font, text, position + offset, Color.Black * 0.7f, 0, origin, scale, SpriteEffects.None, 0);

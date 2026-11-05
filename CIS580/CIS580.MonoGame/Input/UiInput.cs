@@ -149,6 +149,24 @@ public sealed class UiInput
     public bool WasPressed(UiControl control) => WasPressed(control, out _);
 
     /// <summary>
+    /// Who a mouse click counts as: the listened-to source that uses the keyboard and mouse, or
+    /// the first source listened to if none does. Null if nothing is listened to (e.g. during
+    /// play), in which case menus ignore the mouse.
+    /// </summary>
+    public InputSource MouseSource
+    {
+        get
+        {
+            foreach (var source in Sources)
+            {
+                if (source.UsesDevice(InputDevice.KeyboardMouse))
+                    return source;
+            }
+            return Sources.Count > 0 ? Sources[0] : null;
+        }
+    }
+
+    /// <summary>
     /// Lists the inputs bound to a control across the sources being listened to, for showing
     /// hints such as "Enter, Space, A = ok"
     /// </summary>

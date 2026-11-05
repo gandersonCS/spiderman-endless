@@ -23,6 +23,14 @@ public class MainMenuLayer : MenuLayer
     private static readonly Color RoofColor = new(26, 35, 54);
     private static readonly Color RoofEdgeColor = new(46, 59, 88);
 
+    // layout (at the default 800x480 window): the panel is about half the screen, and the
+    // button text is scaled down a little so the longest label fits inside it
+    private const float PanelMinWidth = 384;
+    private const float PanelMargin = 36;
+    private const float FadeWidth = 96;
+    private const float ButtonScale = 0.85f;
+    private const float HintScale = 0.7f;
+
     // little description for each button, shown under the list (same order as the buttons)
     private static readonly string[] Hints =
     {
@@ -97,7 +105,7 @@ public class MainMenuLayer : MenuLayer
         float alpha = Transition.Alpha;
 
         // menu on the left half, Spider-Man's stage on the right
-        float panelWidth = MathF.Max(380, width * 0.45f);    // wide enough for the button font
+        float panelWidth = MathF.Max(PanelMinWidth, width * 0.48f);    // wide enough for the button font
         float roofTop = MathF.Round(height * 0.82f);
         float stageCenter = panelWidth + (width - panelWidth) / 2;
 
@@ -117,8 +125,10 @@ public class MainMenuLayer : MenuLayer
         // panel slides in from the left when the menu opens
         float slide = -Transition.Offset * panelWidth;
         DrawPanel(panelWidth, height, slide, alpha);
-        DrawTitlePlaceholder(new RectangleF(48 + slide, height * 0.10f, panelWidth - 96, height * 0.17f), alpha);
-        DrawButtons(new Vector2(48 + slide, height * 0.38f), panelWidth - 96, alpha);
+        // the buttons can reach a little way into the panel's fade, but no further
+        float contentWidth = panelWidth - PanelMargin - FadeWidth / 2;
+        DrawTitlePlaceholder(new RectangleF(PanelMargin + slide, height * 0.08f, contentWidth, height * 0.17f), alpha);
+        DrawButtons(new Vector2(PanelMargin + slide, height * 0.33f), contentWidth, alpha);
 
         SpriteBatch.End();
     }
@@ -155,7 +165,7 @@ public class MainMenuLayer : MenuLayer
     private void DrawPanel(float panelWidth, float height, float slide, float alpha)
     {
         // solid color behind the buttons, then fades out over the skyline
-        const float fadeWidth = 120;
+        const float fadeWidth = FadeWidth;
         float solid = panelWidth - fadeWidth;
         Fill(new RectangleF(slide, 0, solid, height), PanelColor * alpha);
 
@@ -187,8 +197,16 @@ public class MainMenuLayer : MenuLayer
     private void DrawButtons(Vector2 topLeft, float width, float alpha)
     {
         var font = _buttonFont;
-        float rowHeight = font.LineSpacing + 14;
+        float rowHeight = font.LineSpacing * ButtonScale + 26;    // room for the tall capitals
         var position = topLeft;
+
+        // remember where each button is so they can be clicked
+        Menu.ClearItemBounds();
+
+        // one text size for every button: the preferred size, or smaller if the longest label wouldn't fit
+        float scale = ButtonScale;
+        foreach (var item in Menu.Items)
+            scale = MathF.Min(scale, TextLayout.FitScale(font, item.Text.ToUpperInvariant(), width - 26 - 12, ButtonScale));
 
         for (int i = 0; i < Menu.Items.Count; i++)
         {
@@ -198,24 +216,28 @@ public class MainMenuLayer : MenuLayer
             // selected button shifts right a bit and gets a tinted row + red marker
             float nudge = 8 * fade;
             var row = new RectangleF(position.X + nudge, position.Y, width, rowHeight - 6);
+            Menu.SetItemBounds(item, new Rectangle((int)position.X, (int)row.Y, (int)(width + 8), (int)row.Height));
             Fill(row, HighlightColor * (0.16f * fade * alpha));
             Fill(new RectangleF(row.X + 8, row.Y + 8, 5, row.Height - 16), HighlightColor * (fade * alpha));
 
             var color = !item.IsEnabled ? Theme.DisabledColor : Color.Lerp(ButtonColor, Color.White, fade);
-            float textHeight = font.LineSpacing;
-            var textPosition = new Vector2(row.X + 26, row.Y + (row.Height - textHeight) / 2);
             // The button font only has capital letters
-            SpriteBatch.DrawString(font, item.Text.ToUpperInvariant(), textPosition, color * alpha);
+            // (centered on the letters themselves: this font's capitals are taller than its line height)
+            string label = item.Text.ToUpperInvariant();
+            var textPosition = new Vector2(MathF.Round(row.X + 26), TextLayout.CenteredTop(font, label, row.Y + row.Height / 2, scale));
+            SpriteBatch.DrawString(font, label, textPosition, color * alpha, 0, Vector2.Zero, scale, SpriteEffects.None, 0);
 
             position.Y += rowHeight;
         }
 
-        // description of whatever button is selected
+        // description of whatever button is selected (wrapped so it stays inside the panel)
         int selected = Menu.SelectedIndex;
         if (selected >= 0 && selected < Hints.Length)
         {
-            var hintPosition = new Vector2(topLeft.X + 8, position.Y + 12);
-            SpriteBatch.DrawString(Theme.TextFont, Hints[selected], hintPosition, HintColor * alpha, 0, Vector2.Zero, 0.85f,
+            var hintFont = Theme.TextFont;
+            string hint = TextLayout.Wrap(hintFont, Hints[selected], width - 8, HintScale);
+            var hintPosition = new Vector2(MathF.Round(topLeft.X + 8), MathF.Round(position.Y + 6));
+            SpriteBatch.DrawString(hintFont, hint, hintPosition, HintColor * alpha, 0, Vector2.Zero, HintScale,
                 SpriteEffects.None, 0);
         }
     }

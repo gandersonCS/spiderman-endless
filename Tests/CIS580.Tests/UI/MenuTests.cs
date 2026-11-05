@@ -125,4 +125,49 @@ public class MenuTests
         Assert.Equal("Enter, Space", _ui.DescribeBindings(UiControl.Confirm));
         Assert.Equal("Esc, Backspace", _ui.DescribeBindings(UiControl.Cancel));
     }
+
+    [Fact]
+    public void ClickingAnItem_SelectsAndActivatesIt()
+    {
+        InputSource chosenBy = null;
+        var b = new ButtonItem("b", source => chosenBy = source);
+        var menu = new Menu().Add(new ButtonItem("a", null)).Add(b);
+
+        // FakeInput puts the mouse at (0, 0), so put "b" there
+        menu.SetItemBounds(b, new Microsoft.Xna.Framework.Rectangle(0, 0, 100, 20));
+        _fake.Mouse();
+        _fake.Mouse(left: true);
+
+        Assert.True(menu.HandleMouse(_fake.State, _theme, _keyboard));
+        Assert.Equal(1, menu.SelectedIndex);
+        Assert.Same(_keyboard, chosenBy);
+        Assert.Contains(UiSound.Confirm, _sounds.Played);
+    }
+
+    [Fact]
+    public void ClickingOutsideTheItems_DoesNothing()
+    {
+        bool chosen = false;
+        var b = new ButtonItem("b", _ => chosen = true);
+        var menu = new Menu().Add(new ButtonItem("a", null)).Add(b);
+
+        menu.SetItemBounds(b, new Microsoft.Xna.Framework.Rectangle(50, 50, 100, 20));
+        _fake.Mouse();
+        _fake.Mouse(left: true);
+
+        Assert.False(menu.HandleMouse(_fake.State, _theme, _keyboard));
+        Assert.False(chosen);
+        Assert.Equal(0, menu.SelectedIndex);
+    }
+
+    [Fact]
+    public void MouseSource_IsTheKeyboardAndMouseSource()
+    {
+        var pad = new InputSource(InputDevice.ForGamePad(0), StandardSchemes.GamePad());
+        _ui.Sources.Insert(0, pad);
+        Assert.Same(_keyboard, _ui.MouseSource);
+
+        _ui.Sources.Clear();
+        Assert.Null(_ui.MouseSource);
+    }
 }

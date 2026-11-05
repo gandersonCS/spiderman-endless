@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using CIS580.Input;
 
 namespace CIS580.UI;
@@ -30,6 +31,10 @@ public sealed class LayerStack : DrawableGameComponent
 
     private Layer[] _pendingReplacement;
     private bool _isLoaded;
+
+    // Whether a layer wants the "hand" pointer this frame (it's over something clickable)
+    private bool _handCursorRequested;
+    private bool _handCursorShown;
 
     /// <summary>
     /// The layers, bottom to top
@@ -139,8 +144,15 @@ public sealed class LayerStack : DrawableGameComponent
         SpriteBatch.End();
     }
 
+    /// <summary>
+    /// Shows the "hand" mouse pointer this frame, because the mouse is over something that can
+    /// be clicked. Layers call this from Update or HandleInput, every frame it applies.
+    /// </summary>
+    public void RequestHandCursor() => _handCursorRequested = true;
+
     public override void Update(GameTime gameTime)
     {
+        _handCursorRequested = false;
         UpdateLayerStates(_layers, gameTime.ElapsedGameTime, Game.IsActive);
 
         RemoveClosedLayers();
@@ -166,6 +178,25 @@ public sealed class LayerStack : DrawableGameComponent
             layer.Update(gameTime);
             if (layer.HasFocus && !layer.IsClosing)
                 layer.HandleInput(gameTime);
+        }
+
+        UpdateCursor();
+    }
+
+    private void UpdateCursor()
+    {
+        bool wanted = _handCursorRequested && Game.IsActive;
+        if (wanted == _handCursorShown)
+            return;
+
+        _handCursorShown = wanted;
+        try
+        {
+            Mouse.SetCursor(wanted ? MouseCursor.Hand : MouseCursor.Arrow);
+        }
+        catch (Exception)
+        {
+            // Some platforms can't change the pointer; it's only cosmetic
         }
     }
 

@@ -58,6 +58,13 @@ public abstract class MenuLayer : Layer
 
     public override void HandleInput(GameTime gameTime)
     {
+        // The mouse can point at and click items too (a click counts as whoever uses the mouse)
+        var mouseSource = Ui.MouseSource;
+        if (mouseSource != null && Menu.IsClickableAt(Input.MousePosition))
+            Stack.RequestHandCursor();
+        if (Menu.HandleMouse(Input, Theme, mouseSource))
+            return;
+
         Menu.HandleInput(Ui, Theme);
 
         if (Ui.WasPressed(UiControl.Cancel, out var source))

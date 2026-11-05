@@ -1,3 +1,4 @@
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
 namespace CIS580.Input;
@@ -90,6 +91,33 @@ public class InputState
     /// Determines if a key was newly pressed during this frame.
     /// </summary>
     public bool WasKeyPressed(Keys key) => _current.Keyboard.IsKeyDown(key) && _previous.Keyboard.IsKeyUp(key);
+
+    /// <summary>
+    /// Where the mouse pointer is, in window (backbuffer) pixels
+    /// </summary>
+    public Point MousePosition => _current.Mouse.Position;
+
+    /// <summary>
+    /// Determines if the mouse pointer moved this frame
+    /// </summary>
+    public bool MouseMoved => _current.Mouse.Position != _previous.Mouse.Position;
+
+    /// <summary>
+    /// Determines if the left mouse button was newly pressed this frame (a click)
+    /// </summary>
+    public bool WasLeftClicked
+        => _current.Mouse.LeftButton == ButtonState.Pressed && _previous.Mouse.LeftButton == ButtonState.Released;
+
+    /// <summary>
+    /// Determines if the right mouse button was newly pressed this frame
+    /// </summary>
+    public bool WasRightClicked
+        => _current.Mouse.RightButton == ButtonState.Pressed && _previous.Mouse.RightButton == ButtonState.Released;
+
+    /// <summary>
+    /// How far the scroll wheel turned this frame (positive is away from the user, i.e. "up")
+    /// </summary>
+    public int ScrollWheelDelta => _current.Mouse.ScrollWheelValue - _previous.Mouse.ScrollWheelValue;
 
     /// <summary>
     /// Determines if a gamepad button is currently held down.

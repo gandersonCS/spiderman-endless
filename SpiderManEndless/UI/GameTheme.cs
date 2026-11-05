@@ -23,6 +23,10 @@ public static class GameTheme
         TitleFont = content.Load<SpriteFont>("Fonts/titlefont"),
         TitleScale = 1f,
         TextFont = content.Load<SpriteFont>("Fonts/menufont"),
+        // Title and first item positions chosen so the longest menu (Options, 8 items) fits on an
+        // 800x480 window without scrolling
+        TitleTop = 62,
+        MenuTop = 120,
         PanelTexture = content.Load<Texture2D>("Textures/gradient"),
         Sounds = new UiSoundSet
         {

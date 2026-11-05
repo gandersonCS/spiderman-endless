@@ -37,6 +37,7 @@ public sealed class InGameState : AppState, ILoadable
     private CityBackdrop _backdrop;
     private Texture2D _spidey;
     private WorldView _worldView;
+    private HudLayer _hud;
     private PausePolicy _pausePolicy;
     private GameAudio _audio;
     private GameSettings _settings;
@@ -120,10 +121,15 @@ public sealed class InGameState : AppState, ILoadable
         ListenTo(Array.Empty<InputSource>());
 
         // The world, with the HUD over it; both react to the simulation's events
-        _worldView = Show(new WorldView(Session, _gameFont, _tileset, _backdrop, _spidey, _save));
-        var hud = Show(new HudLayer(_players));
+        // Their on-screen buttons only respond while the game is the top state (not under the pause menu)
+        _worldView = Show(new WorldView(Session, _gameFont, _tileset, _backdrop, _spidey, _save,
+            canContinue: () => Session.World.CanContinue && CanAffordContinue(),
+            buttonsActive: () => IsTop));
+        _hud = Show(new HudLayer(_players,
+            showPause: () => Session.World.Runner.State != RunnerState.Dead,
+            buttonsActive: () => IsTop));
         GameEventRaised += _worldView.OnGameEvent;
-        GameEventRaised += hud.OnGameEvent;
+        GameEventRaised += _hud.OnGameEvent;
 
         // So do the sounds and the game feel (shake, rumble, hit-stop)
         var feedback = new GameFeedback(_players, _worldView, _rumble, _hitStop);
@@ -228,10 +234,28 @@ public sealed class InGameState : AppState, ILoadable
         // After dying, pressing jump continues - but only if they can pay for it, so otherwise
         // the press is ignored (the screen tells them to press Esc for the menu)
         var world = Session.World;
-        bool jumpIgnored = world.Runner.State == RunnerState.Dead && !(world.CanContinue && CanAffordContinue());
+        bool dead = world.Runner.State == RunnerState.Dead;
+        bool canContinue = world.CanContinue && CanAffordContinue();
+
+        // The death screen's buttons can be clicked: Main Menu, or Continue (which is the same
+        // as pressing jump, so the simulation handles it exactly like the keyboard/gamepad)
+        bool clickedContinue = false;
+        if (dead && IsTop)
+        {
+            if (ClickedOn(_worldView.MenuButton))
+            {
+                Flow.Change(new MainMenuState());
+                return;
+            }
+            clickedContinue = canContinue && ClickedOn(_worldView.ContinueButton);
+        }
+
+        bool jumpIgnored = dead && !canContinue;
         foreach (var player in _players)
         {
-            if (!jumpIgnored && (IsTop || !Ui.Sources.Contains(player.Input)))
+            if (clickedContinue && player == _players[0])
+                player.Commands.Submit(new PlayerCommand { Actions = ActionSet.Empty.With(GameAction.Jump) });
+            else if (!jumpIgnored && (IsTop || !Ui.Sources.Contains(player.Input)))
                 player.SubmitCommand<GameAction>(Input);
             else
                 player.SubmitIdle();
@@ -254,13 +278,26 @@ public sealed class InGameState : AppState, ILoadable
 
     private void CheckForPause()
     {
+        bool dead = Session.World.Runner.State == RunnerState.Dead;
+
+        // Clicking the HUD's pause button pauses for the first player
+        if (!dead && ClickedOn(_hud.PauseButton))
+        {
+            Pause(_players[0]);
+            return;
+        }
+
         foreach (var player in _players)
         {
-            // Esc (or Start on a gamepad) goes straight back to the main menu - no pause menu.
-            // Exit() saves the essence they collected so far
+            // Esc (or Start on a gamepad): mid-run it opens the pause menu, but once the run is
+            // over (on the death screen) it goes back to the main menu. Exit() saves the
+            // essence they collected so far
             if (player.Input.WasPressed(StandardControls.Pause, Input))
             {
-                Flow.Change(new MainMenuState());
+                if (dead)
+                    Flow.Change(new MainMenuState());
+                else
+                    Pause(player);
                 return;
             }
 
@@ -275,4 +312,16 @@ public sealed class InGameState : AppState, ILoadable
                 _lostDevice.Remove(player);
         }
     }
+
+    private void Pause(LocalPlayer player)
+    {
+        if (_pausePolicy.CanPause(player, _players))
+            Flow.Push(new PausedState(this, player));
+    }
+
+    /// <summary>
+    /// True if the left mouse button was clicked this frame inside the given on-screen button
+    /// </summary>
+    private bool ClickedOn(Rectangle? button)
+        => button is Rectangle bounds && Game.IsActive && Input.WasLeftClicked && bounds.Contains(Input.MousePosition);
 }
