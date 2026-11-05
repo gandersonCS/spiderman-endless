@@ -31,7 +31,8 @@ public static class GameTheme
         Sounds = new UiSoundSet
         {
             // The selection can move quickly (holding a key repeats), so allow only a couple at once
-            Move = new SoundCue(audio.Ui, content.Load<SoundEffect>("Audio/Sfx/ui_move")) { MaxInstances = 2 },
+            // (ui_blip replaced the starter's ui_move, which is still in Sfx/)
+            Move = new SoundCue(audio.Ui, content.Load<SoundEffect>("Audio/Sfx/ui_blip")) { MaxInstances = 2 },
             Confirm = new SoundCue(audio.Ui, content.Load<SoundEffect>("Audio/Sfx/ui_confirm")),
             Cancel = new SoundCue(audio.Ui, content.Load<SoundEffect>("Audio/Sfx/ui_back")),
         },

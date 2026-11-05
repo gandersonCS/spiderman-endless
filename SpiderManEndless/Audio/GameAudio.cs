@@ -32,15 +32,63 @@ public sealed class GameAudio
     private readonly SoundCue _playerLeft;
     private readonly SoundCue _jump;
     private readonly SoundCue _webShoot;
-    private readonly SoundCue _airDash;
     private readonly SoundCue _essence;
     private readonly SoundCue _deathHit;
     private readonly SoundCue _deathScream;
+    private readonly SoundCue _punchLight;
+    private readonly SoundCue _punchHeavy;
 
     // Spider-Essence pickups climb in pitch while you grab a pack in one go
     private int _essenceStreak;
     private int _essencePack = -1;
     private TimeSpan _lastEssenceTime;
+
+    // ---- swing sounds (the whoosh and the web tension) ----
+    // These follow the swing itself, so instead of reacting to events they look at the runner every
+    // frame (through the world from the last event). SoundCue only does fire-and-forget one-shots,
+    // so their instances are managed here, kept in step with the Effects bus's volume and pause.
+    private World _world;
+    private bool _webConnected;           // whether the web was connected last frame
+
+    private readonly SoundEffect[] _whooshSounds;
+    private SoundEffectInstance _whoosh;
+    private int _lastWhoosh = -1;
+    private float _whooshLevel;           // 0 to 1: how much of the whoosh this swing has earned
+    private float _whooshPitch;           // a little random pitch per whoosh, so they don't repeat exactly
+
+    private readonly SoundEffect _tensionSound;
+    private SoundEffectInstance _tension;
+    private float _tensionLevel;          // current fade level, 0 to 1
+
+    /// <summary>
+    /// How long the web takes to fly out to its anchor (WorldView draws it over 0.07s). The swing
+    /// sounds start once it has, so they only play while the web is actually attached to something
+    /// </summary>
+    private const float WebFlySeconds = 0.07f;
+
+    /// <summary>The whoosh's volume for a full-strength swing, 0 to 1</summary>
+    private const float WhooshVolume = 0.6f;
+
+    /// <summary>
+    /// How long a swing takes to earn the full whoosh (seconds after the web connects). Letting
+    /// go sooner leaves it at that fraction, so a split-second swing barely makes a sound
+    /// </summary>
+    private const float WhooshRampSeconds = 0.3f;
+
+    /// <summary>
+    /// Swing speeds (units/sec) for the quietest and loudest whoosh. The track runs 360 to 720,
+    /// and a swing can go up to about 1.5x that
+    /// </summary>
+    private const float SlowSwingSpeed = 300f, FastSwingSpeed = 900f;
+
+    /// <summary>How loud the tension loop is, 0 to 1</summary>
+    private const float TensionVolume = 0.8f;
+
+    /// <summary>
+    /// How quickly the tension fades in when the web connects, and out when it lets go (seconds).
+    /// Both very short: just enough to avoid a click, so it's only heard while the web is attached
+    /// </summary>
+    private const float TensionFadeIn = 0.04f, TensionFadeOut = 0.03f;
 
     /// <summary>Each pickup in a streak is this much higher than the last (in octaves: 1/12 is a semitone)</summary>
     private const float EssencePitchStep = 1f / 12f;
@@ -74,37 +122,82 @@ public sealed class GameAudio
         };
         _playerLeft = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/player_leave"));
 
-        _jump = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/Jump"))
+        // a low push-off thump + shoe scuff + cloth flick: weighty but short (the old one is Sfx/Jump)
+        _jump = new SoundCue(audio.Effects,
+            content.Load<SoundEffect>("Audio/Sfx/NimbleJump1"),
+            content.Load<SoundEffect>("Audio/Sfx/NimbleJump2"),
+            content.Load<SoundEffect>("Audio/Sfx/NimbleJump3"),
+            content.Load<SoundEffect>("Audio/Sfx/NimbleJump4"),
+            content.Load<SoundEffect>("Audio/Sfx/NimbleJump5"))
         {
             PitchVariation = 0.04f,
             VolumeVariation = 0.1f,
+            Volume = 0.75f,
         };
 
-        // the web shot picks one of these at random each time (never the same one twice in a row)
+        // the web shot, designed in Thwip Lab: a heavy click-clack with a solenoid buzz, a short
+        // spray, a high springy zip and a juicy splat. the four files are variations exported
+        // together (their settings are in Sfx_Originals/thwip-settings.json). picks one at random
+        // each time, never the same one twice in a row
         _webShoot = new SoundCue(audio.Effects,
-            content.Load<SoundEffect>("Audio/Sfx/WebShoot1"),
-            content.Load<SoundEffect>("Audio/Sfx/WetSplat"))
+            content.Load<SoundEffect>("Audio/Sfx/WebThwip1"),
+            content.Load<SoundEffect>("Audio/Sfx/WebThwip2"),
+            content.Load<SoundEffect>("Audio/Sfx/WebThwip3"),
+            content.Load<SoundEffect>("Audio/Sfx/WebThwip4"))
         {
             PitchVariation = 0.05f,
             VolumeVariation = 0.1f,
         };
 
-        // the whoosh when he lets go of the web and flies through the air
-        _airDash = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/AirDash"))
+        // the soft swoosh of the swing, starting when the web connects. how loud it gets depends on
+        // how fast and how long he swings (see UpdateSwingSounds). the old, louder one is Sfx/AirDash
+        _whooshSounds = new[]
         {
-            PitchVariation = 0.05f,
+            content.Load<SoundEffect>("Audio/Sfx/WebWhoosh1"),
+            content.Load<SoundEffect>("Audio/Sfx/WebWhoosh2"),
+            content.Load<SoundEffect>("Audio/Sfx/WebWhoosh3"),
+            content.Load<SoundEffect>("Audio/Sfx/WebWhoosh4"),
+        };
+
+        // the steady creak and fiber crackle of the web pulled taut, looped while it's attached
+        // (see UpdateSwingSounds)
+        _tensionSound = content.Load<SoundEffect>("Audio/Sfx/WebTension");
+
+        // no random pitch here: the streak sets the pitch so the climb sounds like a clean scale
+        // a short bright "point": the bubble's pop pitched up, with a gem sparkle (old one: Sfx/Pickup4)
+        _essence = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/EssencePickup"))
+        {
+            MaxInstances = 8,
+            Volume = 0.9f,
+        };
+
+        // punches for combat. light = an attack connecting, heavy = getting hit or a big finisher.
+        // nothing raises combat events yet, so for now these are played through PlayPunch()
+        _punchLight = new SoundCue(audio.Effects,
+            content.Load<SoundEffect>("Audio/Sfx/PunchLight1"),
+            content.Load<SoundEffect>("Audio/Sfx/PunchLight2"),
+            content.Load<SoundEffect>("Audio/Sfx/PunchLight3"),
+            content.Load<SoundEffect>("Audio/Sfx/PunchLight4"))
+        {
+            PitchVariation = 0.06f,
+            VolumeVariation = 0.15f,
+            MaxInstances = 3,
+        };
+        _punchHeavy = new SoundCue(audio.Effects,
+            content.Load<SoundEffect>("Audio/Sfx/PunchHeavy1"),
+            content.Load<SoundEffect>("Audio/Sfx/PunchHeavy2"),
+            content.Load<SoundEffect>("Audio/Sfx/PunchHeavy3"),
+            content.Load<SoundEffect>("Audio/Sfx/PunchHeavy4"))
+        {
+            PitchVariation = 0.04f,
+            VolumeVariation = 0.1f,
             MaxInstances = 2,
         };
 
-        // no random pitch here: the streak sets the pitch so the climb sounds like a clean scale
-        _essence = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/Pickup4"))
-        {
-            MaxInstances = 8,
-            Volume = 0.8f,
-        };
-
-        _deathHit = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/Hit"));
-        _deathScream = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/spiderman-screaming-no"))
+        // dying is getting hit hard, so it uses the heavy punches (old one: Sfx/Hit)
+        _deathHit = _punchHeavy;
+        // the "no!" falling away: drops in pitch, dulls and echoes out (the original is spiderman-screaming-no.mp3)
+        _deathScream = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/ScreamFall"))
         {
             MaxInstances = 1,
         };
@@ -187,6 +280,8 @@ public sealed class GameAudio
     /// <param name="world">The world it happened in, e.g. to find where a sound comes from</param>
     public void OnGameEvent(GameEvent gameEvent, World world)
     {
+        _world = world;     // the swing sounds watch this world's runner every frame
+
         switch (gameEvent)
         {
             case PlayerJoined joined:
@@ -201,9 +296,6 @@ public sealed class GameAudio
                 break;
             case WebAttached:
                 _webShoot.Play();
-                break;
-            case WebReleased:
-                _airDash.Play();
                 break;
             case EssenceCollected collected:
                 PlayEssence(collected);
@@ -236,6 +328,15 @@ public sealed class GameAudio
     }
 
     /// <summary>
+    /// Plays a punch landing. Once combat raises its own events (e.g. an AttackHit or PlayerHit
+    /// record in GameEvents.cs), add cases for them in <see cref="OnGameEvent"/> that call this.
+    /// </summary>
+    /// <param name="heavy">A heavy hit (getting hit, a finisher) rather than a light one</param>
+    /// <param name="pan">Where the hit is, from -1 (left) to 1 (right)</param>
+    public void PlayPunch(bool heavy, float pan = 0f)
+        => (heavy ? _punchHeavy : _punchLight).Play(pan: pan);
+
+    /// <summary>
     /// Applies the settings to the audio buses, and updates the audio. Call once per frame.
     /// </summary>
     public void Update(GameTime gameTime)
@@ -246,6 +347,132 @@ public sealed class GameAudio
         Audio.Ui.Volume = Audio.Effects.Volume;
 
         Audio.Update(gameTime.ElapsedGameTime);
+        UpdateSwingSounds((float)gameTime.ElapsedGameTime.TotalSeconds);
+    }
+
+    /// <summary>
+    /// Stops every gameplay sound right away, including the swing sounds (which aren't on the
+    /// Effects bus's list, so Effects.StopAll() alone would miss them). Call when leaving the game.
+    /// </summary>
+    public void StopEffects()
+    {
+        Audio.Effects.StopAll();
+        _world = null;
+        _webConnected = false;
+        _whoosh?.Dispose();
+        _whoosh = null;
+        _tension?.Dispose();
+        _tension = null;
+        _tensionLevel = 0f;
+    }
+
+    /// <summary>
+    /// Runs the swing whoosh and the web tension from what the runner is actually doing:
+    /// <list type="bullet">
+    /// <item>both start when the web connects (it has flown out to its anchor)</item>
+    /// <item>the tension loops only while the web is attached, with a pitch that rises over the swing</item>
+    /// <item>the whoosh's volume grows with how long he's been swinging and how fast he's going, then
+    /// stays at that level for its tail after he lets go</item>
+    /// </list>
+    /// </summary>
+    private void UpdateSwingSounds(float dt)
+    {
+        var bus = Audio.Effects;
+        if (bus.IsPaused)
+        {
+            Pause(_whoosh);
+            Pause(_tension);
+            return;
+        }
+        Resume(_whoosh);
+        Resume(_tension);
+
+        var runner = _world?.Runner;
+        bool connected = runner != null && runner.State == RunnerState.Swinging
+            && runner.SwingSeconds >= WebFlySeconds;
+        if (connected && !_webConnected)
+            StartWhoosh();
+        _webConnected = connected;
+
+        // 0 at a slow swing, 1 at a fast one
+        float speed = 0f;
+        if (runner != null)
+        {
+            float vx = _world.Track.Speed, vy = runner.VelocityY;
+            speed = Math.Clamp((MathF.Sqrt(vx * vx + vy * vy) - SlowSwingSpeed) / (FastSwingSpeed - SlowSwingSpeed), 0f, 1f);
+        }
+        float swingTime = connected ? runner.SwingSeconds - WebFlySeconds : 0f;
+
+        // whoosh
+        if (_whoosh != null && _whoosh.State == SoundState.Stopped)
+        {
+            _whoosh.Dispose();
+            _whoosh = null;
+        }
+        if (_whoosh != null)
+        {
+            if (connected)
+            {
+                float earned = Math.Clamp(swingTime / WhooshRampSeconds, 0f, 1f);
+                _whooshLevel = earned * (0.15f + 0.85f * speed);
+                _whoosh.Pitch = Math.Clamp(-0.08f + 0.2f * speed + _whooshPitch, -1f, 1f);
+            }
+            _whoosh.Volume = Math.Clamp(_whooshLevel * WhooshVolume * bus.EffectiveVolume, 0f, 1f);
+        }
+
+        // tension
+        float step = dt / (connected ? TensionFadeIn : TensionFadeOut);
+        _tensionLevel = Math.Clamp(_tensionLevel + (connected ? step : -step), 0f, 1f);
+        if (_tensionLevel > 0f && _tension == null)
+        {
+            _tension = _tensionSound.CreateInstance();
+            _tension.IsLooped = true;
+            _tension.Volume = 0f;
+            _tension.Play();
+        }
+        if (_tension != null)
+        {
+            if (_tensionLevel <= 0f)
+            {
+                _tension.Dispose();
+                _tension = null;
+            }
+            else
+            {
+                if (connected)
+                    _tension.Pitch = Math.Clamp(-0.1f + 0.25f * swingTime, -0.1f, 0.2f);
+                _tension.Volume = Math.Clamp(_tensionLevel * TensionVolume * bus.EffectiveVolume, 0f, 1f);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts a whoosh (a different one from last time), silent until the swing earns it
+    /// </summary>
+    private void StartWhoosh()
+    {
+        _whoosh?.Dispose();
+        int pick = _random.Next(_whooshSounds.Length - 1);
+        if (pick >= _lastWhoosh && _lastWhoosh >= 0)
+            pick++;
+        _lastWhoosh = pick;
+        _whoosh = _whooshSounds[pick].CreateInstance();
+        _whooshLevel = 0f;
+        _whooshPitch = (float)(_random.NextDouble() * 0.12 - 0.06);
+        _whoosh.Volume = 0f;
+        _whoosh.Play();
+    }
+
+    private static void Pause(SoundEffectInstance instance)
+    {
+        if (instance?.State == SoundState.Playing)
+            instance.Pause();
+    }
+
+    private static void Resume(SoundEffectInstance instance)
+    {
+        if (instance?.State == SoundState.Paused)
+            instance.Resume();
     }
 
     /// <summary>

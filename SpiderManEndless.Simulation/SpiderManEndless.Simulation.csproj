@@ -11,4 +11,8 @@
   <ItemGroup>
     <ProjectReference Include="..\CIS580\CIS580.Core\CIS580.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Lets the tests set internal state, e.g. RooftopTrack.IsScrolling -->
+    <InternalsVisibleTo Include="SpiderManEndless.Tests" />
+  </ItemGroup>
 </Project>

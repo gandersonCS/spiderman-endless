@@ -1,4 +1,5 @@
 {
+     "dotnet.defaultSolution": "SpiderManEndless.slnx",
   "editor.suggestOnTriggerCharacters": true,
   "editor.wordBasedSuggestions": "off",
   "editor.inlineSuggest.enabled": false,

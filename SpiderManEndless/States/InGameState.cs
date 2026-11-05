@@ -214,7 +214,7 @@ public sealed class InGameState : AppState, ILoadable
 
         // Stop the game's sounds and vibration (the music changes with the next state)
         _rumble.StopAll();
-        _audio?.Audio.Effects.StopAll();
+        _audio?.StopEffects();      // also stops the web tension loop
 
         // The world view keeps drawing (with this content) while it fades out, so only
         // unload the content once it is gone

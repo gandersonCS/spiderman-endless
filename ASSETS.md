@@ -71,6 +71,21 @@ loops (procedurally generated, public domain). They still get built but the game
 
 ## Sound effects
 
+- `Audio/Sfx/PunchLight1-4.wav`, `PunchHeavy1-4.wav` - trimmed and normalized from the
+  **37 hits/punches** pack by Independent.nu (Ljudbank), OpenGameArt:
+  <https://opengameart.org/content/37-hitspunches>. License: TODO, confirm on the page (listed as CC0
+  as far as I know). Light = hits 10, 11, 14, 17; heavy = hits 23, 28, 31, 22.
+- `Audio/Sfx/EssencePickup.wav` - the main pop of `bubbles-single1.wav`, pitched up a fifth, layered
+  with a high-passed `gem-gather-orig.wav`. Sources and licenses: TODO.
+- `Audio/Sfx/ui_blip.wav` - trimmed from `beep.wav`. Source and license: TODO.
+- `Audio/Sfx/WebWhoosh1-4.wav`, `NimbleJump1-5.wav` and `WebTension.wav` - synthesized from scratch with
+  `Sfx_Originals/build_sfx.py` (filtered noise and sine sweeps), no samples, made for this project.
+- `Audio/Sfx/WebThwip1-4.wav` - designed by me in Thwip Lab, a synthesizer page Claude built for this project
+  (all synthesized, no samples). The settings are saved in `Audio/Sfx_Originals/thwip-settings.json`.
+- `Audio/Sfx/ScreamFall.wav` - `spiderman-screaming-no.mp3` processed with `build_sfx.py` (pitch glide,
+  muffling, fade and a synthetic echo tail), so same source as that file.
+- The unedited downloads are kept in `Audio/Sfx_Originals/`.
+
 - `Audio/Sfx/ui_move.wav`, `ui_confirm.wav`, `ui_back.wav`, `player_join.wav`, `player_leave.wav` -
   placeholder sounds from the starter project, procedurally generated (synthesized, no samples),
   public domain.
@@ -79,13 +94,20 @@ loops (procedurally generated, public domain). They still get built but the game
 
 - `Fonts/LiberationSans-Regular.ttf` - Liberation Sans 2.1.5 from the Liberation Fonts project,
   <https://github.com/liberationfonts/liberation-fonts>, SIL Open Font License 1.1
-  (see `Fonts/LiberationSans-LICENSE.txt`). Used by `menufont.spritefont` and `gamefont.spritefont`.
-  Came with the starter project.
+  (see `Fonts/LiberationSans-LICENSE.txt`). Came with the starter project; no longer used by
+  the game's fonts.
 - `Fonts/Action Comics.ttf`, `Action Comics Black.ttf`, `KOMIKAX_.ttf`, `Super Squad.ttf`,
-  `The Amazing Spider-Man.ttf` - comic-style fonts I downloaded for the title/HUD. None of them
-  are used by the game yet. Source and license: https://www.dafont.com/theme.php?cat=102 Free for Personal Use
+  `The Amazing Spider-Man.ttf` - comic-style fonts I downloaded for the menus and HUD. Used by
+  `menufont.spritefont` (Komika Axis), `gamefont.spritefont` (Super Squad), `buttonfont.spritefont`
+  (Action Comics Black) and `titlefont.spritefont` (The Amazing Spider-Man).
+  Source and license: https://www.dafont.com/theme.php?cat=102 Free for Personal Use
 
 ## Application icon
 
+- `SpiderManEndless/spideyicon.ico` - the game's window and .exe icon. Made from the cover of
+  *The Amazing Spider-Man* (Vol. 5, 2018 series) #54, "Last Remains" Part Five, Marvel Comics,
+  published December 9, 2020. Cover art by Patrick Gleason, colors by Edgar Delgado.
+  <https://www.marvel.com/comics/issue/77122/the_amazing_spider-man_2018_54>.
+  © Marvel. Used without permission as a fan/educational placeholder; not for distribution.
 - `SpiderManEndless/Icon.ico` and `SpiderManEndless/Icon.bmp` - the default icons from the MonoGame
   project templates (<https://monogame.net>), Microsoft Public License (Ms-PL).

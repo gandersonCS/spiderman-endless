@@ -1,0 +1,43 @@
+{
+  "thwipLab": 1,
+  "layers": {
+    "click": {
+      "on": true,
+      "level": 0.95,
+      "tone": 5000,
+      "gap": 36,
+      "weight": 0.78,
+      "ring": 1.5,
+      "servo": 0.56
+    },
+    "spray": {
+      "on": true,
+      "level": 0.67,
+      "start": 0,
+      "length": 155,
+      "bright": 9400,
+      "sweep": 0.55,
+      "spit": 0.59
+    },
+    "zip": {
+      "on": true,
+      "level": 0.5,
+      "delay": 120,
+      "length": 180,
+      "from": 12750,
+      "to": 11000,
+      "spring": 0.45,
+      "cross": 0.2,
+      "settle": 0.5
+    },
+    "splat": {
+      "on": true,
+      "level": 0.71,
+      "delay": 165,
+      "length": 120,
+      "thud": 0.14,
+      "juice": 0.86,
+      "tone": 1700
+    }
+  }
+}
