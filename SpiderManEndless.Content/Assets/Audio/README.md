@@ -4,7 +4,10 @@ Sources and licenses for everything in here are in the top-level `ASSETS.md`.
 
 | File | Use |
 |---|---|
+| `Music/Title Loading.mp3` | Title screen ("press any button") music (Spider-Man Unlimited) |
 | `Music/Title Menu.mp3` | Main menu music (Spider-Man Unlimited) |
+| `Music/Title Submenu.mp3` | Options menu and pause menu music; the run's music is held and resumes where it left off (Spider-Man Unlimited) |
+| `Music/Levelup.mp3` | Plays once over the music (which ducks under it) when a run beats your best distance (Spider-Man Unlimited) |
 | `Loops/Action A.wav` | Run music, intro + loop (Spider-Man Unlimited) |
 | `Loops/Action B.wav` | Run music, intro + loop (Spider-Man Unlimited) |
 | `Loops/Tutorial.wav` | Run music, intro + loop (Spider-Man Unlimited) |
@@ -26,7 +29,9 @@ Sources and licenses for everything in here are in the top-level `ASSETS.md`.
 | `Music/menu_loop.wav`, `Music/game_loop.wav` | Old starter placeholder loops, not played anymore |
 
 The other mp3s in `Music/` are from the same Spider-Man Unlimited rip and are saved for later
-(boss fights etc.).
+(boss fights etc.). Their file names now match the track titles in their tags (several were shifted
+by one: e.g. the old `Action B.mp3` was really "Action A", which is where `Loops/Action A.wav` came
+from). There's no real "Intro" track in the rip.
 
 How it gets built (see `Builder.cs`):
 - `Sfx/*.wav` and `Music/*.wav` build as `SoundEffect`.

@@ -6,7 +6,8 @@ namespace SpiderManEndless.UI;
 
 /// <summary>
 /// The animated Spider-Man on the main menu. Idles for a few seconds, does a random attack
-/// (jab, upward kick or uppercut), goes back to idle, and repeats.
+/// (jab, upward kick or uppercut), goes back to idle, and repeats. After leaping in from the
+/// title screen he plays a quick landing first (<see cref="Land"/>).
 /// </summary>
 /// <remarks>
 /// This class just picks the frame, <see cref="MainMenuLayer"/> does the actual drawing.
@@ -20,6 +21,8 @@ public sealed class MenuSpiderMan
     }
 
     private static readonly Clip Idle = new(MenuSpiderFrames.Standing, 0.12f, Loops: true);
+
+    private static readonly Clip Landing = new(MenuSpiderFrames.Landing, 0.06f, Loops: false);
 
     private static readonly Clip[] Fights =
     {
@@ -73,6 +76,15 @@ public sealed class MenuSpiderMan
             Play(Idle);
             _idleLeft = NextIdleSeconds();
         }
+    }
+
+    /// <summary>
+    /// Plays the landing (crouch and stand back up), then carries on idling as normal
+    /// </summary>
+    public void Land()
+    {
+        Play(Landing);
+        _idleLeft = NextIdleSeconds();
     }
 
     private void Play(Clip clip)
@@ -138,6 +150,15 @@ public static class MenuSpiderFrames
         Kick(12, 1423, 35, 38), Kick(68, 1412, 34, 28), Kick(128, 1392, 41, 50), Kick(209, 1383, 35, 58),
         Kick(276, 1386, 31, 54), Kick(337, 1409, 40, 38), Kick(405, 1424, 32, 39),
     };
+
+    /// <summary>
+    /// "Web Drop": hanging upside down from a web. The origin is the top of the web stub above
+    /// his feet, so draw it at the end of the web line and rotate it to swing
+    /// </summary>
+    public static readonly SpiderFrames.Frame WebDrop = new(new Rectangle(39, 2542, 29, 30), new Vector2(14, 0));
+
+    /// <summary>Landing from a jump: the last five frames of the uppercut (crouch, then stand up)</summary>
+    public static SpiderFrames.Frame[] Landing => Uppercut[^5..];
 
     /// <summary>"Uppercut" rows - jump part, then landing part</summary>
     public static readonly SpiderFrames.Frame[] Uppercut =

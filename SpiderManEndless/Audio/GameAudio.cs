@@ -37,6 +37,9 @@ public sealed class GameAudio
     private readonly SoundCue _deathScream;
     private readonly SoundCue _punchLight;
     private readonly SoundCue _punchHeavy;
+    private readonly SoundCue _newBest;
+    private TimeSpan _newBestLength;
+    private TimeSpan _unduckIn;            // time left until the music comes back up after the new-best jingle
 
     // Spider-Essence pickups climb in pitch while you grab a pack in one go
     private int _essenceStreak;
@@ -111,7 +114,18 @@ public sealed class GameAudio
         Audio = audio ?? throw new ArgumentNullException(nameof(audio));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
 
+        TitleMusic = content.Load<SoundEffect>("Audio/Music/Title Loading");
         MenuMusic = content.Load<SoundEffect>("Audio/Music/Title Menu");
+        SubmenuMusic = content.Load<SoundEffect>("Audio/Music/Title Submenu");
+
+        // the jingle for beating your best distance. it goes on the Music bus (so the music volume
+        // applies) but plays once over whatever's playing instead of replacing it
+        var levelUp = content.Load<SoundEffect>("Audio/Music/Levelup");
+        _newBestLength = levelUp.Duration;
+        _newBest = new SoundCue(audio.Music, levelUp)
+        {
+            MaxInstances = 1,
+        };
 
         // each run picks one of these at random. intro plays once, then it loops
         RunMusic = Array.ConvertAll(RunTracks, track => LoadLoopingTrack(content, track));
@@ -216,9 +230,19 @@ public sealed class GameAudio
     public AudioManager Audio { get; }
 
     /// <summary>
-    /// The music for the menus
+    /// The music for the title screen ("press any button")
+    /// </summary>
+    public SoundEffect TitleMusic { get; }
+
+    /// <summary>
+    /// The music for the main menu
     /// </summary>
     public SoundEffect MenuMusic { get; }
+
+    /// <summary>
+    /// The music for submenus (Options) and the pause menu
+    /// </summary>
+    public SoundEffect SubmenuMusic { get; }
 
     /// <summary>
     /// The songs that can play during a run (random pick each run)
@@ -256,9 +280,56 @@ public sealed class GameAudio
     }
 
     /// <summary>
+    /// Cross-fades to the title screen music (if it isn't already playing)
+    /// </summary>
+    public void PlayTitleMusic() => Audio.MusicPlayer.Play(TitleMusic);
+
+    /// <summary>
     /// Cross-fades to the menu music (if it isn't already playing)
     /// </summary>
-    public void PlayMenuMusic() => Audio.MusicPlayer.Play(MenuMusic);
+    public void PlayMenuMusic()
+    {
+        // leaving the death screen mid-jingle shouldn't leave the menu music turned down
+        if (_unduckIn > TimeSpan.Zero)
+        {
+            _unduckIn = TimeSpan.Zero;
+            Audio.MusicPlayer.Unduck();
+        }
+        Audio.MusicPlayer.Play(MenuMusic, TimeSpan.FromSeconds(0.75));
+    }
+
+    /// <summary>
+    /// Cross-fades to the submenu music (if it isn't already playing), e.g. for the Options menu
+    /// </summary>
+    public void PlaySubmenuMusic() => Audio.MusicPlayer.Play(SubmenuMusic, TimeSpan.FromSeconds(0.75));
+
+    /// <summary>
+    /// Pausing: puts the run's music on hold and plays the submenu music instead
+    /// </summary>
+    public void PlayPauseMusic() => Audio.MusicPlayer.Hold(SubmenuMusic, TimeSpan.FromSeconds(0.5));
+
+    /// <summary>
+    /// Resuming: brings the run's music back from where it was paused
+    /// </summary>
+    public void ResumeGameMusic() => Audio.MusicPlayer.Release(TimeSpan.FromSeconds(0.5));
+
+    /// <summary>
+    /// The level-up jingle, for a new best distance. Plays once over the music
+    /// </summary>
+    public void PlayNewBest()
+    {
+        // turn the run music down so the jingle stands out, then back up once it's done
+        if (_newBest.Play())
+        {
+            Audio.MusicPlayer.Duck(0.25f, TimeSpan.FromSeconds(0.15));
+            _unduckIn = _newBestLength;
+        }
+    }
+
+    /// <summary>
+    /// The jump sound, for jumps outside the game (e.g. Spider-Man leaping into place on the main menu)
+    /// </summary>
+    public void PlayJump() => _jump.Play();
 
     /// <summary>
     /// Cross-fades into a random run song. Never picks the same one as last run so it doesn't get
@@ -352,6 +423,13 @@ public sealed class GameAudio
         Audio.Music.Volume = _settings.MusicVolume / (float)GameSettings.MaxVolume;
         Audio.Effects.Volume = _settings.EffectsVolume / (float)GameSettings.MaxVolume;
         Audio.Ui.Volume = Audio.Effects.Volume;
+
+        if (_unduckIn > TimeSpan.Zero)
+        {
+            _unduckIn -= gameTime.ElapsedGameTime;
+            if (_unduckIn <= TimeSpan.Zero)
+                Audio.MusicPlayer.Unduck(TimeSpan.FromSeconds(1));
+        }
 
         Audio.Update(gameTime.ElapsedGameTime);
         UpdateSwingSounds((float)gameTime.ElapsedGameTime.TotalSeconds);

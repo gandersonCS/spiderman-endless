@@ -150,7 +150,11 @@ public sealed class InGameState : AppState, ILoadable
             case RunEnded ended:
                 // bank what they collected (that's also what pays for a continue)
                 if (RecordRun(ended.DistanceMeters) is RunRecord saved)
+                {
                     _worldView.ShowRunRecord(saved with { EssenceCollected = Session.World.Essence.CollectedThisRun });
+                    if (saved.NewHighScore)
+                        _audio.PlayNewBest();
+                }
                 break;
 
             case RunContinued continued:

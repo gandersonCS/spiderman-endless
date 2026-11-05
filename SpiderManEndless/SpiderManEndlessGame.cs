@@ -93,7 +93,7 @@ public class SpiderManEndlessGame : Game
         if (args.Contains("--play"))
             _flow.Change(new LoadingState(new InGameState(new[] { _settings.Controls.SinglePlayer(0) })));
         else
-            _flow.Change(new MainMenuState());
+            _flow.Change(new MainMenuState(showTitle: true));
     }
 
     protected override void LoadContent()

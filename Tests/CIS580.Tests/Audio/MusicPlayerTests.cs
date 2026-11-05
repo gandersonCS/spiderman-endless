@@ -84,4 +84,40 @@ public class MusicPlayerTests
         audio.Update(Second);
         audio.StopAll();
     }
+
+    [Fact]
+    public void Hold_PlaysTheNewTrack_AndRelease_BringsTheOldOneBack()
+    {
+        var audio = new AudioManager();
+        var game = TestSounds.Silent();
+        var pause = TestSounds.Silent();
+        audio.MusicPlayer.Play(game, fade: TimeSpan.Zero);
+
+        audio.MusicPlayer.Hold(pause, fade: Second);
+        Assert.Same(pause, audio.MusicPlayer.Current);
+        Assert.True(audio.MusicPlayer.IsHolding);
+
+        audio.Update(Second);
+        audio.MusicPlayer.Release(fade: Second);
+        Assert.Same(game, audio.MusicPlayer.Current);
+        Assert.False(audio.MusicPlayer.IsHolding);
+
+        audio.Update(Second);
+        Assert.Equal(1f, audio.MusicPlayer.Level, 0.001f);
+        audio.StopAll();
+    }
+
+    [Fact]
+    public void Release_WithNothingHeld_DoesNothing()
+    {
+        var audio = new AudioManager();
+        var track = TestSounds.Silent();
+        audio.MusicPlayer.Play(track, fade: TimeSpan.Zero);
+
+        audio.MusicPlayer.Release();
+
+        Assert.Same(track, audio.MusicPlayer.Current);
+        Assert.Equal(1f, audio.MusicPlayer.Level);
+        audio.StopAll();
+    }
 }

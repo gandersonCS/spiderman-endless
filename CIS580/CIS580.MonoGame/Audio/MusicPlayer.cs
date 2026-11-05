@@ -21,6 +21,10 @@ namespace CIS580.Audio;
 /// The music can also be "ducked": turned down while something else needs attention, such as
 /// the pause menu, then brought back up.
 /// </para>
+/// <para>
+/// Or the current track can be put on hold (<see cref="Hold"/>) while another one plays, e.g.
+/// the pause menu's own music, then picked back up right where it left off (<see cref="Release"/>).
+/// </para>
 /// </remarks>
 public sealed class MusicPlayer
 {
@@ -39,6 +43,7 @@ public sealed class MusicPlayer
 
     private readonly List<Track> _fadingOut = new();
     private Track _current;
+    private Track _held;                  // put on hold by Hold(): faded out and paused, not thrown away
     private Fader _duck = new(1f);
 
     internal MusicPlayer(AudioBus bus)
@@ -61,6 +66,11 @@ public sealed class MusicPlayer
     /// <see cref="SoundEffect"/> is playing)
     /// </summary>
     public LoopingTrack CurrentLoopingTrack => _current?.Key as LoopingTrack;
+
+    /// <summary>
+    /// Whether a track is on hold (see <see cref="Hold"/>)
+    /// </summary>
+    public bool IsHolding => _held != null;
 
     /// <summary>
     /// Whether the music is ducked
@@ -126,6 +136,41 @@ public sealed class MusicPlayer
     public void Stop(TimeSpan? fade = null) => FadeOutCurrent(fade ?? DefaultFade);
 
     /// <summary>
+    /// Puts the current track on hold and plays another one in its place. The held track fades
+    /// out and pauses (it isn't thrown away), so <see cref="Release"/> can carry on from the same
+    /// spot. Handy for menu music over the game's music, e.g. while paused.
+    /// </summary>
+    /// <param name="track">The track to play while the current one is held (it loops)</param>
+    /// <param name="fade">How long the cross-fade takes (null for <see cref="DefaultFade"/>)</param>
+    public void Hold(SoundEffect track, TimeSpan? fade = null)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        if (_held == null && _current != null && _current.Key != track)
+        {
+            _held = _current;
+            _held.Fade.FadeTo(0f, fade ?? DefaultFade);
+            _current = null;
+        }
+        Play(track, fade);
+    }
+
+    /// <summary>
+    /// Fades out whatever is playing and brings back the track put on hold by <see cref="Hold"/>,
+    /// from where it was paused. Does nothing if no track is on hold.
+    /// </summary>
+    /// <param name="fade">How long the cross-fade takes (null for <see cref="DefaultFade"/>)</param>
+    public void Release(TimeSpan? fade = null)
+    {
+        if (_held == null)
+            return;
+
+        FadeOutCurrent(fade ?? DefaultFade);
+        _current = _held;
+        _held = null;
+        _current.Fade.FadeTo(1f, fade ?? DefaultFade);   // Update() resumes it if it was paused
+    }
+
+    /// <summary>
     /// Turns the music down, e.g. while the game is paused
     /// </summary>
     /// <param name="level">How loud the ducked music is (0 to 1)</param>
@@ -152,6 +197,16 @@ public sealed class MusicPlayer
         if (_current != null)
             UpdateTrack(_current, elapsed, volume, paused);
 
+        if (_held != null)
+        {
+            // fade it out like any other track, but pause it once it's silent instead of stopping it
+            if (!paused)
+                _held.Fade.Update(elapsed);
+            _held.Instance.Volume = Math.Clamp(_held.Fade.Level * volume, 0f, 1f);
+            if ((paused || _held.Fade.Level <= 0f) && _held.Instance.State == SoundState.Playing)
+                _held.Instance.Pause();
+        }
+
         for (int i = _fadingOut.Count - 1; i >= 0; i--)
         {
             var track = _fadingOut[i];
@@ -170,6 +225,8 @@ public sealed class MusicPlayer
     internal void StopAll()
     {
         FadeOutCurrent(TimeSpan.Zero);
+        _held?.Instance.Dispose();
+        _held = null;
         foreach (var track in _fadingOut)
             track.Instance.Dispose();
         _fadingOut.Clear();

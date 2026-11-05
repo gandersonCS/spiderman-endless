@@ -64,7 +64,10 @@ public class Builder : ContentBuilder
         // here if you need another track.
         string[] tracks =
         {
+            "Title Loading",                        // title screen ("press any button") music
             "Title Menu",                           // main menu music
+            "Title Submenu",                        // Options and pause menu music
+            "Levelup",                              // jingle for a new best distance
         };
         foreach (var track in tracks)
             content.Include($"Audio/Music/{track}.mp3", new Mp3Importer(), new SoundEffectProcessor());
