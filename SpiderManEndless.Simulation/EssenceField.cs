@@ -12,6 +12,35 @@ namespace SpiderManEndless.Simulation;
 public readonly record struct EssenceOrb(double X, float Y, int Pack);
 
 /// <summary>
+/// Spider-Essence from a beaten soldier (or a close call) flying to Spider-Man on its own.
+/// Track space, like the orbs.
+/// </summary>
+public sealed class HomingEssence
+{
+    internal HomingEssence(double x, float y, float vx, float vy, int pack)
+    {
+        X = x;
+        Y = y;
+        VelocityX = vx;
+        VelocityY = vy;
+        Pack = pack;
+    }
+
+    public double X { get; internal set; }
+    public float Y { get; internal set; }
+
+    /// <summary>Velocity relative to the screen (units/sec), so the view can stretch it into a streak</summary>
+    public float VelocityX { get; internal set; }
+    public float VelocityY { get; internal set; }
+
+    /// <summary>Seconds since it burst out</summary>
+    public float Age { get; internal set; }
+
+    /// <summary>Which burst it's from (negative, so it never matches an orb pack)</summary>
+    public int Pack { get; }
+}
+
+/// <summary>
 /// How a pack of orbs is arranged
 /// </summary>
 public enum EssencePackShape { Line, Circle }
@@ -30,7 +59,13 @@ public enum EssencePackShape { Line, Circle }
 public sealed class EssenceField
 {
     public const int MinPackSize = 3;
-    public const int MaxPackSize = 7;
+    /// <summary>Biggest pack at the start of a run...</summary>
+    public const int EasyMaxPackSize = 7;
+    /// <summary>...and at full difficulty (packs get bigger and closer together further into a run)</summary>
+    public const int MaxPackSize = 10;
+
+    /// <summary>Spacing between packs is multiplied by this at full difficulty</summary>
+    public const float HardSpacingScale = 0.7f;
 
     /// <summary>Track x where the first pack can show up (just past the right edge of the screen)</summary>
     public const double FirstPackX = 900;
@@ -77,8 +112,23 @@ public sealed class EssenceField
 
     private static readonly double MaxPackLength = (MaxPackSize - 1) * LineSpacing;
 
+    // homing essence: bursts out, then curves in to him faster and faster
+    public const float HomingBurstMinSpeed = 160f;
+    public const float HomingBurstMaxSpeed = 320f;
+    public const float HomingTopSpeed = 1500f;
+    /// <summary>How long it takes to get up to top speed</summary>
+    public const float HomingRampSeconds = 0.45f;
+    /// <summary>How quickly it turns toward him (higher = tighter)</summary>
+    public const float HomingSteer = 9f;
+    /// <summary>Picked up once it's this close to his chest</summary>
+    public const float HomingCollectRadius = 22f;
+    /// <summary>Picked up anyway after this long, so none get lost</summary>
+    public const float HomingMaxSeconds = 1.4f;
+
     private readonly DeterministicRandom _random;
     private readonly List<EssenceOrb> _orbs = new();
+    private readonly List<HomingEssence> _homing = new();
+    private int _burstCount;
     private double _nextPackX = FirstPackX;
     private int _packCount;
 
@@ -95,6 +145,9 @@ public sealed class EssenceField
     /// <summary>Orbs that haven't been picked up yet</summary>
     public IReadOnlyList<EssenceOrb> Orbs => _orbs;
 
+    /// <summary>Essence flying to him (from beaten soldiers and close calls)</summary>
+    public IReadOnlyList<HomingEssence> Homing => _homing;
+
     /// <summary>Orbs collected this run</summary>
     public int CollectedThisRun { get; private set; }
 
@@ -105,12 +158,69 @@ public sealed class EssenceField
     /// Spawns new packs, picks up any the runner touches, and cleans up old ones. Call once per
     /// tick after the runner updates.
     /// </summary>
-    public void Update(RooftopTrack track, Runner runner, EventQueue<GameEvent> events, long tick)
+    public void Update(RooftopTrack track, Runner runner, EventQueue<GameEvent> events, long tick, float dt = 1f / 60f)
     {
         Generate(track);
         if (runner.State != RunnerState.Dead)
             Collect(track, runner, events, tick);
+        UpdateHoming(track, runner, events, tick, dt);
         Discard(track);
+    }
+
+    /// <summary>
+    /// Bursts <paramref name="count"/> essence out of a spot (a beaten soldier, a close call).
+    /// It flies out in all directions, then homes in on him and counts when it gets there.
+    /// </summary>
+    /// <param name="random">Randomness for the burst directions (the caller's, so this field's own
+    /// sequence - and so the orb layout - doesn't depend on how many soldiers got beaten)</param>
+    public void SpawnBurst(double x, float y, int count, DeterministicRandom random)
+    {
+        int pack = -1 - _burstCount++;
+        for (int i = 0; i < count; i++)
+        {
+            float angle = (i + random.NextFloat(-0.35f, 0.35f)) * 2 * MathF.PI / count;
+            float speed = random.NextFloat(HomingBurstMinSpeed, HomingBurstMaxSpeed);
+            _homing.Add(new HomingEssence(x, y, MathF.Cos(angle) * speed, MathF.Sin(angle) * speed, pack));
+        }
+    }
+
+    private void UpdateHoming(RooftopTrack track, Runner runner, EventQueue<GameEvent> events, long tick, float dt)
+    {
+        if (_homing.Count == 0)
+            return;
+
+        double targetX = track.RunnerTrackX;
+        float targetY = runner.FeetY - Runner.HandHeight / 2;
+        bool dead = runner.State == RunnerState.Dead;
+
+        for (int i = 0; i < _homing.Count; i++)
+        {
+            var spark = _homing[i];
+            spark.Age += dt;
+
+            float dx = (float)(targetX - spark.X), dy = targetY - spark.Y;
+            float distance = MathF.Sqrt(dx * dx + dy * dy);
+
+            // the run's over (so it gets saved with the run), it's reached him, or it's taken too long
+            if (dead || distance <= HomingCollectRadius || spark.Age >= HomingMaxSeconds)
+            {
+                _homing.RemoveAt(i--);
+                CollectedThisRun++;
+                events.Raise(new EssenceCollected(tick, spark.X, spark.Y, CollectedThisRun, spark.Pack));
+                continue;
+            }
+
+            // steer toward him, faster the longer it's been flying. velocity is relative to the
+            // screen (he never moves on screen), so the scroll gets added on top
+            float speed = HomingTopSpeed * MathF.Min(1f, spark.Age / HomingRampSeconds);
+            float wantX = dx / distance * speed, wantY = dy / distance * speed;
+            float steer = 1f - MathF.Exp(-HomingSteer * dt);
+            spark.VelocityX += (wantX - spark.VelocityX) * steer;
+            spark.VelocityY += (wantY - spark.VelocityY) * steer;
+
+            spark.X += (spark.VelocityX + track.Speed) * dt;
+            spark.Y += spark.VelocityY * dt;
+        }
     }
 
     /// <summary>
@@ -129,7 +239,10 @@ public sealed class EssenceField
 
     private void AddPack(RooftopTrack track)
     {
-        int count = _random.NextInt(MinPackSize, MaxPackSize + 1);
+        // further along = bigger packs, closer together (a tile is a meter)
+        float d = HazardField.DifficultyAt(_nextPackX / RooftopTrack.TileSize);
+        int maxSize = (int)MathF.Round(EasyMaxPackSize + (MaxPackSize - EasyMaxPackSize) * d);
+        int count = _random.NextInt(MinPackSize, maxSize + 1);
         var shape = _random.Chance(CircleChance) ? EssencePackShape.Circle : EssencePackShape.Line;
 
         // circle just big enough that the orbs don't overlap
@@ -170,7 +283,8 @@ public sealed class EssenceField
             }
         }
 
-        _nextPackX = end + _random.NextFloat(MinPackSpacing, MaxPackSpacing);
+        float spacingScale = 1f + (HardSpacingScale - 1f) * d;
+        _nextPackX = end + _random.NextFloat(MinPackSpacing, MaxPackSpacing) * spacingScale;
     }
 
     private void AddLine(int pack, int count, double startX, float startY, float slope)

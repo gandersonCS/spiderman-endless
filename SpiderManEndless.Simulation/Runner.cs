@@ -161,6 +161,12 @@ public sealed class Runner
 
     public RunEndReason? EndReason { get; private set; }
 
+    /// <summary>Seconds since he died (0 while he's alive)</summary>
+    public float DeadSeconds => State == RunnerState.Dead ? _deadSeconds : 0;
+
+    /// <summary>True once he's been dead long enough that a jump press continues</summary>
+    public bool CanContinueNow => State == RunnerState.Dead && _deadSeconds >= ContinueDelaySeconds;
+
     /// <summary>The attack he's doing right now (None if he isn't)</summary>
     public AttackKind Attack { get; private set; }
 
@@ -452,12 +458,13 @@ public sealed class Runner
 
     /// <summary>
     /// Whichever roof is higher between the spot behind his feet and the spot in front. Null if both are gaps.
+    /// Counts the tops of things he can stand on (landed pylons) if he's above them.
     /// </summary>
     private float? RoofUnderFoot(RooftopTrack track)
     {
         double x = track.RunnerTrackX;
-        float? back = track.RoofAt(x - FootBack);
-        float? front = track.RoofAt(x + FootFront);
+        float? back = track.SurfaceAt(x - FootBack, FeetY);
+        float? front = track.SurfaceAt(x + FootFront, FeetY);
         if (back is null) return front;
         if (front is null) return back;
         return MathF.Min(back.Value, front.Value);
@@ -501,6 +508,17 @@ public sealed class Runner
         _events.Raise(new RunnerLanded(_tick, fallSpeed));
     }
 
+    /// <summary>
+    /// Ends the run because something got him (a bullet, a pylon, a pumpkin bomb, a soldier).
+    /// Everything is one hit. Does nothing if he's already dead.
+    /// </summary>
+    internal void Kill(RooftopTrack track, RunEndReason reason)
+    {
+        if (State == RunnerState.Dead)
+            return;
+        Die(track, reason);
+    }
+
     private void Die(RooftopTrack track, RunEndReason reason)
     {
         State = RunnerState.Dead;
@@ -512,6 +530,10 @@ public sealed class Runner
         track.IsScrolling = false;
         if (reason == RunEndReason.HitWall)
             VelocityY = -250f;       // little bounce off the wall
+        else if (reason is RunEndReason.Shot or RunEndReason.Blasted or RunEndReason.Tackled or RunEndReason.HitPylon)
+            VelocityY = -380f;       // knocked up into the air before he falls
+        else if (reason == RunEndReason.Crushed)
+            VelocityY = 0f;
         _events.Raise(new RunEnded(_tick, track.DistanceMeters, reason));
     }
 }

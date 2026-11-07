@@ -45,8 +45,11 @@ public class MainMenuLayer : MenuLayer
 
     // ---- title screen ----
 
-    /// <summary>Where the menu is: the title screen, the leap from the title into the menu, or the menu itself</summary>
-    private enum Phase { Title, Intro, Menu }
+    /// <summary>
+    /// Where the menu is: the title screen, the leap from the title into the menu, the menu itself,
+    /// or the leap back up to the title ("Back to Title": the same leap played backwards)
+    /// </summary>
+    private enum Phase { Title, Intro, Menu, Outro }
 
     private static readonly Color WebColor = new(235, 240, 245);
     private static readonly Color LogoRed = new(214, 38, 38);
@@ -68,6 +71,8 @@ public class MainMenuLayer : MenuLayer
     private static readonly Buttons[] AllButtons = Enum.GetValues<Buttons>();
 
     private readonly Action _onTitleDismissed;
+    private readonly Action _onReturnedToTitle;
+    private readonly MenuItem _titleButton;
     private readonly Action _onOptionsOpened;
     private readonly Action _onOptionsClosed;
     private readonly Random _random = new();
@@ -87,7 +92,11 @@ public class MainMenuLayer : MenuLayer
         "Your stats, Spider-Essence and costumes",
         "Audio, controls, display",
         "Quit to desktop",
+        "Back to the title screen",
     };
+
+    /// <summary>Text size for the small "Back to Title" button, compared to the main buttons</summary>
+    private const float SmallButtonScale = 0.55f;
 
     private readonly Action _onExit;
     private readonly MenuSpiderMan _spiderMan = new();
@@ -105,14 +114,17 @@ public class MainMenuLayer : MenuLayer
     /// <param name="onTitleDismissed">Called when someone presses a button on the title screen</param>
     /// <param name="onOptionsOpened">Called when the Options menu opens</param>
     /// <param name="onOptionsClosed">Called once the Options menu has closed</param>
+    /// <param name="onReturnedToTitle">Called when someone picks "Back to Title"</param>
     public MainMenuLayer(Action<InputSource> onPlay, Action onExit, bool showTitle = false,
-        Action onTitleDismissed = null, Action onOptionsOpened = null, Action onOptionsClosed = null)
+        Action onTitleDismissed = null, Action onOptionsOpened = null, Action onOptionsClosed = null,
+        Action onReturnedToTitle = null)
         : base("")
     {
         _onExit = onExit;
         _onTitleDismissed = onTitleDismissed;
         _onOptionsOpened = onOptionsOpened;
         _onOptionsClosed = onOptionsClosed;
+        _onReturnedToTitle = onReturnedToTitle;
         _phase = showTitle ? Phase.Title : Phase.Menu;
         FitToScreen = false;
 
@@ -120,6 +132,11 @@ public class MainMenuLayer : MenuLayer
             .Add(new ButtonItem("The Closet", _ => Open(new ClosetLayer())))
             .Add(new ButtonItem("Options", _ => OpenOptions()))
             .Add(new ButtonItem("Exit Game", OnCancel));
+
+        // drawn small in the bottom corner, but still a normal menu item, so it can be reached with
+        // the keyboard or a gamepad (down from Exit Game, or up from Run)
+        _titleButton = new ButtonItem("Back to Title", _ => ReturnToTitle());
+        Menu.Add(_titleButton);
 
         _fade = new float[Menu.Items.Count];
 
@@ -187,6 +204,8 @@ public class MainMenuLayer : MenuLayer
                 if (AnyButtonPressed())
                     FinishIntro();
                 break;
+            case Phase.Outro:
+                break;      // nothing to do while he leaps back up
             default:
                 base.HandleInput(gameTime);
                 break;
@@ -230,6 +249,22 @@ public class MainMenuLayer : MenuLayer
         _onTitleDismissed?.Invoke();
     }
 
+    /// <summary>
+    /// "Back to Title": he leaps back up and catches the web (the intro played backwards),
+    /// then the title screen carries on as if the game had just started
+    /// </summary>
+    private void ReturnToTitle()
+    {
+        if (_phase != Phase.Menu)
+            return;
+
+        _phase = Phase.Outro;
+        _introTime = IntroSeconds;
+        _releaseAngle = SwingAngle;     // where the web will be when he catches it
+        Menu.SelectedIndex = 0;         // back on Run for next time
+        _onReturnedToTitle?.Invoke();
+    }
+
     /// <summary>He's landed: the menu takes over</summary>
     private void FinishIntro()
     {
@@ -252,6 +287,15 @@ public class MainMenuLayer : MenuLayer
                 _introTime += dt;
                 if (_introTime >= IntroSeconds)
                     FinishIntro();
+                break;
+            case Phase.Outro:
+                // the leap played backwards: time runs down to 0, when he's back on the web
+                _introTime -= dt;
+                if (_introTime <= 0)
+                {
+                    _introTime = 0;
+                    _phase = Phase.Title;
+                }
                 break;
             default:
                 _spiderMan.Update(gameTime);
@@ -293,6 +337,7 @@ public class MainMenuLayer : MenuLayer
                 panelShown = 0;
                 break;
             case Phase.Intro:
+            case Phase.Outro:
                 float u = IntroProgress;
                 titleShown = 1 - SmoothStep(u / 0.4f);
                 panelShown = SmoothStep((u - 0.3f) / 0.7f);
@@ -315,6 +360,7 @@ public class MainMenuLayer : MenuLayer
                 DrawHanging(title, alpha);
                 break;
             case Phase.Intro:
+            case Phase.Outro:
                 DrawLeap(title, feet, height, alpha);
                 break;
             default:
@@ -343,7 +389,7 @@ public class MainMenuLayer : MenuLayer
         // the buttons can reach a little way into the panel's fade, but no further
         float contentWidth = panelWidth - PanelMargin - FadeWidth / 2;
         DrawLogo(new RectangleF(PanelMargin + slide, height * 0.08f, contentWidth, height * 0.17f), alpha);
-        DrawButtons(new Vector2(PanelMargin + slide, height * 0.33f), contentWidth, alpha);
+        DrawButtons(new Vector2(PanelMargin + slide, height * 0.33f), contentWidth, height, alpha);
 
         SpriteBatch.End();
     }
@@ -397,7 +443,7 @@ public class MainMenuLayer : MenuLayer
         }
     }
 
-    private void DrawButtons(Vector2 topLeft, float width, float alpha)
+    private void DrawButtons(Vector2 topLeft, float width, float height, float alpha)
     {
         var font = _buttonFont;
         float rowHeight = font.LineSpacing * ButtonScale + 26;    // room for the tall capitals
@@ -408,13 +454,15 @@ public class MainMenuLayer : MenuLayer
 
         // one text size for every button: the preferred size, or smaller if the longest label wouldn't fit
         float scale = ButtonScale;
-        foreach (var item in Menu.Items)
+        foreach (var item in Menu.Items.Where(item => item != _titleButton))
             scale = MathF.Min(scale, TextLayout.FitScale(font, item.Text.ToUpperInvariant(), width - 26 - 12, ButtonScale));
 
         for (int i = 0; i < Menu.Items.Count; i++)
         {
             var item = Menu.Items[i];
             float fade = _fade[i];
+            if (item == _titleButton)
+                continue;   // drawn separately, below
 
             // selected button shifts right a bit and gets a tinted row + red marker
             float nudge = 8 * fade;
@@ -433,6 +481,8 @@ public class MainMenuLayer : MenuLayer
             position.Y += rowHeight;
         }
 
+        DrawTitleButton(topLeft.X, width, height, scale * SmallButtonScale, alpha);
+
         // description of whatever button is selected (wrapped so it stays inside the panel)
         int selected = Menu.SelectedIndex;
         if (selected >= 0 && selected < Hints.Length)
@@ -443,6 +493,30 @@ public class MainMenuLayer : MenuLayer
             SpriteBatch.DrawString(hintFont, hint, hintPosition, HintColor * alpha, 0, Vector2.Zero, HintScale,
                 SpriteEffects.None, 0);
         }
+    }
+
+    /// <summary>
+    /// The small "Back to Title" button, tucked in the bottom corner of the panel
+    /// </summary>
+    private void DrawTitleButton(float left, float width, float height, float scale, float alpha)
+    {
+        var font = _buttonFont;
+        int index = Menu.Items.IndexOf(_titleButton);
+        float fade = _fade[index];
+
+        string label = _titleButton.Text.ToUpperInvariant();
+        float textWidth = font.MeasureString(label).X * scale;
+        float rowHeight = MathF.Round(font.LineSpacing * scale + 14);
+        var row = new RectangleF(left + 4 * fade, height - PanelMargin * 0.6f - rowHeight, MathF.Min(width, textWidth + 32),
+            rowHeight);
+        Menu.SetItemBounds(_titleButton, new Rectangle((int)left, (int)row.Y, (int)(row.Width + 8), (int)row.Height));
+        Fill(row, HighlightColor * (0.16f * fade * alpha));
+        Fill(new RectangleF(row.X + 6, row.Y + 5, 3, row.Height - 10), HighlightColor * (fade * alpha));
+
+        // a bit dimmer than the main buttons until it's selected
+        var color = Color.Lerp(ButtonColor * 0.75f, Color.White, fade);
+        var textPosition = new Vector2(MathF.Round(row.X + 16), TextLayout.CenteredTop(font, label, row.Y + row.Height / 2, scale));
+        SpriteBatch.DrawString(font, label, textPosition, color * alpha, 0, Vector2.Zero, scale, SpriteEffects.None, 0);
     }
 
     // ======================= title screen =======================

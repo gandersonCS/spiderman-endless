@@ -53,6 +53,19 @@ all related characters belong to Marvel. It's not for sale and isn't meant to be
 
 - Spider-Essence orbs - drawn in code (`Views/EssenceArt.cs`), no image file.
 
+- `Textures/task_force_soldier.png` - the task force soldiers. Cut out of **Open Gunner Hero
+  Version 2** by Master484 (credit and license are printed on the sheet), OpenGameArt:
+  (link: TODO). License: **CC-BY 3.0**,
+  so the credit has to stay. I removed the purple background and packed just the left-facing
+  frames I use (run cycle, stand, duck, jump, hurt, aim up/down) into a 64x64 grid.
+  Then darkened (`Textures/Originals/recolor_soldier.py`) so they still read red and blue like
+  Spider-Man, but murkier and more military.
+  The original sheet is kept unedited in `Textures/Originals/open_gunner_hero_v2.png` (not loaded).
+- `Textures/task_force_pylon.png`, `Textures/pumpkin_bomb.png`, `Textures/spider_sense.png` - the
+  task force pylon, pumpkin bomb and spider sense warning sprites. Source and license: TODO.
+- Bullets, drop shadows, jetpack flames, aim lasers, explosions and dust - drawn in code
+  (`Views/WorldView.Hazards.cs`), no image files.
+
 ## Music
 
 Main menu and in-run music is from **Spider-Man Unlimited** (Gameloft, 2014, Android/iOS/Windows
@@ -91,6 +104,10 @@ loops (procedurally generated, public domain). They still get built but the game
   (all synthesized, no samples). The settings are saved in `Audio/Sfx_Originals/thwip-settings.json`.
 - `Audio/Sfx/ScreamFall.wav` - `spiderman-screaming-no.mp3` processed with `build_sfx.py` (pitch glide,
   muffling, fade and a synthetic echo tail), so same source as that file.
+- `Audio/Sfx/SpiderSense.wav`, `PumpkinBlast.wav`, `PylonSlam.wav` - synthesized from scratch with
+  `Sfx_Originals/synth_hazard_sfx.py` (sine partials and filtered noise), no samples, made for this project.
+- `Audio/Sfx/LaserBurst.wav` (task force gunshots), `AirDash.wav` (close-call whoosh) and `Pickup4.wav`
+  (a soldier bursting into essence) - source and license: TODO.
 - The unedited downloads are kept in `Audio/Sfx_Originals/`.
 
 - `Audio/Sfx/ui_move.wav`, `ui_confirm.wav`, `ui_back.wav`, `player_join.wav`, `player_leave.wav` -

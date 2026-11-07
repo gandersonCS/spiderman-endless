@@ -22,6 +22,11 @@ public readonly record struct WindowSlot(int Column, int Row);
 public readonly record struct WebAnchor(double X, float Y);
 
 /// <summary>
+/// Something solid on top of a roof that he can stand on (a landed pylon's top). Track space.
+/// </summary>
+public readonly record struct Platform(double Left, double Right, float Top);
+
+/// <summary>
 /// A single building: a run of columns with a flat roof at <see cref="TopRow"/> that goes down
 /// off the bottom of the screen.
 /// </summary>
@@ -82,8 +87,12 @@ public sealed class RooftopTrack
     //   no gap     - buildings touch
     //   small gap  - you can just jump it
     //   big gap    - too far to jump at starting speed, you need to jump and then swing
+    //
+    // the chances shift toward big gaps as the run goes on (difficulty 0 -> 1, see HazardField.DifficultyAt)
     public const float NoGapChance = 0.35f;
     public const float SmallGapChance = 0.35f;     // whatever's left over = big gap
+    public const float HardNoGapChance = 0.15f;
+    public const float HardSmallGapChance = 0.32f;
     public const int SmallGapMin = 2;
     public const int SmallGapMax = 4;
     public const int BigGapMin = 9;
@@ -103,7 +112,7 @@ public sealed class RooftopTrack
 
     // cruising speed (units/sec) and how quickly it ramps up over a run
     public const float BaseSpeed = 360f;
-    public const float MaxSpeed = 720f;
+    public const float MaxSpeed = 820f;
     public const float Acceleration = 4f;
 
     // a swing can leave the city going faster than cruising speed. it slows back down gradually
@@ -113,6 +122,7 @@ public sealed class RooftopTrack
 
     private readonly DeterministicRandom _random;
     private readonly List<Building> _buildings = new();
+    private readonly List<Platform> _platforms = new();
     private int _nextColumn;
     private double _elapsed;
     private double _distanceOffset;     // keeps the score the same when a continue moves the runner ahead
@@ -235,6 +245,32 @@ public sealed class RooftopTrack
         return null;
     }
 
+    /// <summary>Things on roofs he can stand on (landed pylons). The hazards keep this up to date.</summary>
+    public IReadOnlyList<Platform> Platforms => _platforms;
+
+    internal void ClearPlatforms() => _platforms.Clear();
+    internal void AddPlatform(Platform platform) => _platforms.Add(platform);
+
+    /// <summary>
+    /// What he'd stand on at a spot: the roof, or a platform on it if his feet are above the
+    /// platform's top (or less than <see cref="Runner.StepTolerance"/> below it, so he can step up
+    /// onto it like a roof). Null if it's a gap.
+    /// </summary>
+    public float? SurfaceAt(double trackX, float feetY)
+    {
+        float? surface = RoofAt(trackX);
+        foreach (var platform in _platforms)
+        {
+            if (trackX >= platform.Left && trackX < platform.Right
+                && feetY <= platform.Top + Runner.StepTolerance
+                && (surface is null || platform.Top < surface.Value))
+            {
+                surface = platform.Top;
+            }
+        }
+        return surface;
+    }
+
     /// <summary>Roof y, or the bottom of the screen if it's a gap</summary>
     public float GroundYAt(double trackX) => RoofAt(trackX) ?? Rows * TileSize;
 
@@ -253,10 +289,15 @@ public sealed class RooftopTrack
 
     private int PickGap()
     {
+        // harder further along (a column is one meter)
+        float d = HazardField.DifficultyAt(_nextColumn);
+        float noGap = NoGapChance + (HardNoGapChance - NoGapChance) * d;
+        float smallGap = SmallGapChance + (HardSmallGapChance - SmallGapChance) * d;
+
         float roll = _random.NextFloat();
-        if (roll < NoGapChance)
+        if (roll < noGap)
             return 0;
-        if (roll < NoGapChance + SmallGapChance)
+        if (roll < noGap + smallGap)
             return _random.NextInt(SmallGapMin, SmallGapMax + 1);
         return _random.NextInt(BigGapMin, BigGapMax + 1);
     }

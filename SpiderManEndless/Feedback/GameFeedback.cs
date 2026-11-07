@@ -68,6 +68,28 @@ public sealed class GameFeedback
                 foreach (var local in _players)
                     _rumble.Play(local, 0.3f, 0.6f, TimeSpan.FromMilliseconds(150));
                 break;
+            case EnemyDefeated defeated:
+                // the punch: a jolt that gets bigger as the combo builds, and a tiny freeze to sell it
+                int combo = Math.Min(defeated.Combo, 4);
+                _world.Shake(0.4f + 0.06f * combo);
+                _hitStop.Start(TimeSpan.FromMilliseconds(70 + 10 * combo));
+                foreach (var local in _players)
+                    _rumble.Play(local, 0.5f, 0.3f, TimeSpan.FromMilliseconds(90));
+                break;
+            case PumpkinExploded:
+                _world.Shake(0.35f);
+                foreach (var local in _players)
+                    _rumble.Play(local, 0.6f, 0.2f, TimeSpan.FromMilliseconds(160));
+                break;
+            case PylonLanded:
+                _world.Shake(0.2f);
+                foreach (var local in _players)
+                    _rumble.Play(local, 0.4f, 0.1f, TimeSpan.FromMilliseconds(120));
+                break;
+            case NearMiss:
+                foreach (var local in _players)
+                    _rumble.Play(local, 0.1f, 0.4f, TimeSpan.FromMilliseconds(80));
+                break;
             case RunnerLanded landed when landed.FallSpeed > 700f:
                 // hard landing
                 _world.Shake(0.15f);

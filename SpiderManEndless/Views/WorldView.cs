@@ -12,13 +12,14 @@ namespace SpiderManEndless.Views;
 /// <summary>
 /// Draws everything in the runner: parallax skyline (<see cref="CityBackdrop"/>), the scrolling tile rooftops, essence orbs,
 /// Spider-Man (plus his web when swinging), the distance/essence counters, and the end screen.
+/// The hazards (soldiers, pylons, bombs, bullets, spider sense, combo) are in WorldView.Hazards.cs.
 /// </summary>
 /// <remarks>
 /// This is purely a view: it reads the <see cref="GameSession"/> and draws it, but never changes
 /// it. The camera doesn't move - the <see cref="RooftopTrack"/> scrolls instead, so everything gets
 /// drawn at (track position - scroll distance).
 /// </remarks>
-public class WorldView : WorldLayer
+public partial class WorldView : WorldLayer
 {
     private static readonly RectangleF WorldArea = new(0, 0, World.Width, World.Height);
 
@@ -88,6 +89,7 @@ public class WorldView : WorldLayer
     private readonly CityBackdrop _backdrop;
     private readonly Texture2D _spidey;
     private readonly SaveFile _save;
+    private readonly HazardSprites _hazardSprites;
     private readonly Func<bool> _canContinue;
     private readonly Func<bool> _buttonsActive;
     private Rectangle? _continueButton;
@@ -107,9 +109,12 @@ public class WorldView : WorldLayer
     /// <param name="save">The player's progress, for showing how much Spider-Essence they have toward a continue</param>
     /// <param name="canContinue">Whether the player can continue right now (has continues left and can pay)</param>
     /// <param name="buttonsActive">Whether the end screen's buttons can be clicked right now (e.g. not while paused)</param>
+    /// <param name="hazardSprites">Sprites for the soldiers, pylons, pumpkin bombs and spider sense (hazards aren't drawn without them)</param>
     public WorldView(GameSession session, SpriteFont font, Texture2D tileset, CityBackdrop backdrop, Texture2D spidey,
-        SaveFile save = null, Func<bool> canContinue = null, Func<bool> buttonsActive = null)
+        SaveFile save = null, Func<bool> canContinue = null, Func<bool> buttonsActive = null,
+        HazardSprites hazardSprites = null)
     {
+        _hazardSprites = hazardSprites;
         _canContinue = canContinue ?? (() => session.World.CanContinue);
         _buttonsActive = buttonsActive ?? (() => true);
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -150,14 +155,21 @@ public class WorldView : WorldLayer
     public Rectangle? MenuButton => _session.World.Runner.State == RunnerState.Dead ? _menuButton : null;
 
     /// <summary>
-    /// Handles sim events - right now just spawns a burst where an orb was picked up.
-    /// (boss flash would go here later)
+    /// Handles sim events: a burst where essence was picked up, plus the hazard effects
+    /// (hit flashes, explosions, dust, popups). (boss flash would go here later)
     /// </summary>
     public void OnGameEvent(GameEvent gameEvent)
     {
         if (gameEvent is EssenceCollected collected)
             _bursts.Add(new Burst(collected.X, collected.Y, _clock));
+        OnHazardEvent(gameEvent);
     }
+
+    /// <summary>
+    /// Opens a popup over the world (like the continue prompt). It belongs to the world view,
+    /// so it closes along with it
+    /// </summary>
+    public T ShowPopup<T>(T popup) where T : Layer => Open(popup);
 
     /// <summary>
     /// Shows the save results (new best, essence banked) on the end-of-run screen until the next
@@ -173,6 +185,7 @@ public class WorldView : WorldLayer
     {
         _clock = (float)gameTime.TotalGameTime.TotalSeconds;
         _bursts.RemoveAll(b => _clock - b.Start > BurstSeconds);
+        UpdateHazardEffects();
 
         // new run started (or he continued), clear the old summary
         if (_runRecord != null &&
@@ -220,11 +233,19 @@ public class WorldView : WorldLayer
 
         var track = _session.World.Track;
         var runner = _session.World.Runner;
+        var hazards = _session.World.Hazards;
 
         _backdrop?.Draw(SpriteBatch, track.ScrollX, track.DistanceMeters, left, right);
         DrawBuildings(track, left, right, bottom);
+        DrawDropShadows(hazards, track);
+        DrawHazards(hazards, track, left, right);
         DrawEssence(camera, track, left, right);
+        DrawHazardGlows(camera, hazards, track, left, right);
         DrawSpiderMan(track, runner);
+        DrawInvulnerableGlow(camera, hazards, runner);
+        DrawBullets(camera, hazards, track);
+        DrawEffects(camera, track);
+        DrawSpiderSense(hazards, runner);
         DrawText(camera, track, runner);
     }
 
@@ -336,6 +357,8 @@ public class WorldView : WorldLayer
 
     private void DrawSpiderMan(RooftopTrack track, Runner runner)
     {
+        _spideyTint = SpideyTint(_session.World.Hazards);
+        _drawnSpidey.Clear();
         var feet = new Vector2(RooftopTrack.RunnerX, MathF.Round(runner.FeetY));
 
         // attacking on a roof or in the air replaces the normal pose (swinging is handled below,
@@ -398,8 +421,11 @@ public class WorldView : WorldLayer
     }
 
     private void DrawFrame(SpiderFrames.Frame frame, Vector2 position, float rotation = 0)
-        => SpriteBatch.Draw(_spidey, position, frame.Source, Color.White, rotation, frame.Origin,
+    {
+        SpriteBatch.Draw(_spidey, position, frame.Source, _spideyTint, rotation, frame.Origin,
             PixelScale, SpriteEffects.None, 0);
+        _drawnSpidey.Add((frame, position, rotation));     // so the invulnerable glow can trace him
+    }
 
     private void DrawText(Camera2D camera, RooftopTrack track, Runner runner)
     {
@@ -416,6 +442,8 @@ public class WorldView : WorldLayer
         var countPosition = new Vector2(EssenceIconCenter.X + EssenceIconRadius + 10, EssenceIconCenter.Y);
         DrawOutlined(essence.ToString(), countPosition, new Vector2(0, _font.LineSpacing / 2f), Color.White, 0.65f);
         DrawEssenceIcon(camera, EssenceIconCenter, EssenceIconRadius);
+        DrawCombo(_session.World.Hazards);
+        DrawPopups(track);
 
         // controls hint at the start of a run (two short lines, so it fits on screen)
         if (runner.State != RunnerState.Dead && track.DistanceMeters < 80)
@@ -461,7 +489,7 @@ public class WorldView : WorldLayer
         Fill(new RectangleF(panel.X, panel.Y, panel.Width, 3), AccentColor);
 
         float y = panel.Y + EndPanelPadding;
-        string why = runner.EndReason == RunEndReason.Fell ? "You fell!" : "You hit a building!";
+        string why = _deathLine ?? DeathLines[0];
         y = DrawTextLine(why, y, Color.White, TitleScale);
         y = DrawTextLine($"{track.DistanceMeters:0} m", y, Color.White, DistanceScale);
 

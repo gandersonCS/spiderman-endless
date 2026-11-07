@@ -78,8 +78,12 @@ public sealed class GameSession : ISimulation
         var runnerInput = new RunnerInput(jumpPressed, jumpDown, attackPressed);
         bool wantsContinue = World.Runner.Update(runnerInput, World.Track, dt, Events, context.Tick);
 
+        // soldiers, bullets, pylons and bombs: after the runner moves (so attacks and hits use
+        // where he actually is), before the essence (so a soldier beaten this tick starts paying out)
+        World.Hazards.Update(World.Track, World.Runner, World.Essence, Events, context.Tick, dt);
+
         // do this after the runner moves so he picks up what he actually went through
-        World.Essence.Update(World.Track, World.Runner, Events, context.Tick);
+        World.Essence.Update(World.Track, World.Runner, Events, context.Tick, dt);
 
         // pressing jump after dying picks the run back up where it ended (if there are continues
         // left - the game only lets the press through if the player can afford it)

@@ -22,18 +22,18 @@ public static class DefaultControls
 
     /// <summary>
     /// The whole keyboard and mouse, for a player who isn't sharing it. Jump is Space or A,
-    /// attack is a left click
+    /// attack (punch) is E or a left click
     /// </summary>
     public static ControlScheme Keyboard() => StandardSchemes.Keyboard()
         .Bind(nameof(GameAction.Jump), Key(Keys.Space), Key(Keys.A))
-        .Bind(nameof(GameAction.Attack), Mouse(MouseButton.Left));
+        .Bind(nameof(GameAction.Attack), Key(Keys.E), Mouse(MouseButton.Left));
 
     /// <summary>
     /// The left side of a shared keyboard
     /// </summary>
     public static ControlScheme KeyboardLeft() => StandardSchemes.KeyboardLeft()
         .Bind(nameof(GameAction.Jump), Key(Keys.Space))
-        .Bind(nameof(GameAction.Attack), Key(Keys.F));
+        .Bind(nameof(GameAction.Attack), Key(Keys.E));
 
     /// <summary>
     /// The right side of a shared keyboard
@@ -46,6 +46,6 @@ public static class DefaultControls
     /// A gamepad
     /// </summary>
     public static ControlScheme GamePad() => StandardSchemes.GamePad()
-        .Bind(nameof(GameAction.Jump), Button(Buttons.A), new GamePadAxisBinding(GamePadAxis.RightTrigger))
-        .Bind(nameof(GameAction.Attack), Button(Buttons.X));
+        .Bind(nameof(GameAction.Jump), Button(Buttons.A), new GamePadAxisBinding(GamePadAxis.LeftTrigger))
+        .Bind(nameof(GameAction.Attack), Button(Buttons.X), new GamePadAxisBinding(GamePadAxis.RightTrigger));
 }

@@ -31,7 +31,7 @@ public class EssenceFieldTests
     }
 
     [Fact]
-    public void Packs_HaveThreeToSevenOrbs()
+    public void Packs_StayWithinThePackSizes()
     {
         // packs spawn all at once way ahead of the runner, so the first time we see one it should be full
         var sizes = new Dictionary<int, int>();

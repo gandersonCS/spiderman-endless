@@ -38,6 +38,16 @@ public sealed class GameAudio
     private readonly SoundCue _punchLight;
     private readonly SoundCue _punchHeavy;
     private readonly SoundCue _newBest;
+    private readonly SoundCue _spiderSense;
+    private readonly SoundCue _gunshot;
+    private readonly SoundCue _pumpkinBlast;
+    private readonly SoundCue _pylonSlam;
+    private readonly SoundCue _closeCall;
+    private readonly SoundCue _essenceBurst;
+    private TimeSpan _lastSpiderSense = TimeSpan.FromHours(-1);
+
+    /// <summary>Spider sense tingles closer together than this are skipped, so a burst of threats doesn't stack up</summary>
+    private static readonly TimeSpan SpiderSenseGap = TimeSpan.FromSeconds(0.35);
     private TimeSpan _newBestLength;
     private TimeSpan _unduckIn;            // time left until the music comes back up after the new-best jingle
 
@@ -215,6 +225,54 @@ public sealed class GameAudio
             MaxInstances = 2,
         };
 
+        // ---- hazards ----
+
+        // the spider sense tingle, synthesized (Sfx_Originals/synth_hazard_sfx.py)
+        _spiderSense = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/SpiderSense"))
+        {
+            MaxInstances = 1,
+            Volume = 0.7f,
+            PitchVariation = 0.03f,
+        };
+
+        // task force rifles: a laser zap
+        _gunshot = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/LaserBurst"))
+        {
+            MaxInstances = 3,
+            Volume = 0.45f,
+            PitchVariation = 0.08f,
+        };
+
+        // synthesized too (same script)
+        _pumpkinBlast = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/PumpkinBlast"))
+        {
+            MaxInstances = 2,
+            Volume = 0.85f,
+            PitchVariation = 0.06f,
+        };
+        _pylonSlam = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/PylonSlam"))
+        {
+            MaxInstances = 2,
+            Volume = 0.75f,
+            PitchVariation = 0.05f,
+        };
+
+        // a whoosh going past for a close call (the old swing whoosh, louder than the new ones)
+        _closeCall = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/AirDash"))
+        {
+            MaxInstances = 1,
+            Volume = 0.5f,
+            PitchVariation = 0.05f,
+        };
+
+        // a beaten soldier bursting into essence (the old pickup sound)
+        _essenceBurst = new SoundCue(audio.Effects, content.Load<SoundEffect>("Audio/Sfx/Pickup4"))
+        {
+            MaxInstances = 2,
+            Volume = 0.55f,
+            PitchVariation = 0.05f,
+        };
+
         // dying is getting hit hard, so it uses the heavy punches (old one: Sfx/Hit)
         _deathHit = _punchHeavy;
         // the "no!" falling away: drops in pitch, dulls and echoes out (the original is spiderman-screaming-no.mp3)
@@ -378,6 +436,28 @@ public sealed class GameAudio
             case EssenceCollected collected:
                 PlayEssence(collected);
                 break;
+            case SpiderSenseTriggered:
+                PlaySpiderSense();
+                break;
+            case BulletFired fired:
+                _gunshot.Play(pan: PanFor(world, fired.X));
+                break;
+            case EnemyDefeated defeated:
+                // a shooter, or a big combo, gets the heavy punch
+                PlayPunch(heavy: defeated.WasShooter || defeated.Combo >= 3, pan: PanFor(world, defeated.X));
+                break;
+            case EnemyExploded exploded:
+                _essenceBurst.Play(pan: PanFor(world, exploded.X));
+                break;
+            case PumpkinExploded blast:
+                _pumpkinBlast.Play(pan: PanFor(world, blast.X));
+                break;
+            case PylonLanded landed:
+                _pylonSlam.Play(pan: PanFor(world, landed.X));
+                break;
+            case NearMiss:
+                _closeCall.Play();
+                break;
             case RunEnded:
                 _deathHit.Play();
                 if (_random.NextDouble() < ScreamChance)
@@ -404,6 +484,24 @@ public sealed class GameAudio
         float pitch = MathF.Min((_essenceStreak - 1) * EssencePitchStep, EssenceMaxPitch);
         _essence.Play(pitch: pitch);
     }
+
+    /// <summary>
+    /// The spider sense tingle, unless one just played
+    /// </summary>
+    private void PlaySpiderSense()
+    {
+        TimeSpan now = Audio.Now;
+        if (now - _lastSpiderSense < SpiderSenseGap)
+            return;
+        _lastSpiderSense = now;
+        _spiderSense.Play();
+    }
+
+    /// <summary>
+    /// Pans a sound toward where something is on screen (from its track x)
+    /// </summary>
+    private static float PanFor(World world, double trackX)
+        => PanFor(new Vector2((float)(trackX - world.Track.ScrollX), 0));
 
     /// <summary>
     /// Plays a punch landing. Once combat raises its own events (e.g. an AttackHit or PlayerHit

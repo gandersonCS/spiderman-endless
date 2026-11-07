@@ -12,6 +12,7 @@ using SpiderManEndless.Audio;
 using SpiderManEndless.Feedback;
 using SpiderManEndless.Settings;
 using SpiderManEndless.Simulation;
+using SpiderManEndless.UI;
 using SpiderManEndless.Views;
 
 namespace SpiderManEndless.States;
@@ -36,6 +37,7 @@ public sealed class InGameState : AppState, ILoadable
     private Texture2D _tileset;
     private CityBackdrop _backdrop;
     private Texture2D _spidey;
+    private HazardSprites _hazardSprites;
     private WorldView _worldView;
     private HudLayer _hud;
     private PausePolicy _pausePolicy;
@@ -44,6 +46,9 @@ public sealed class InGameState : AppState, ILoadable
     private SaveFile _save;
     private int _bankedEssence;        // essence from this run already added to the save, so a continue doesn't count it twice
     private bool _runCounted;          // this run already counted toward "runs played"
+    private ContinuePromptLayer _continuePrompt;   // "Continue for N essence?" while it's open
+    private bool _continueConfirmed;                // they said yes: send the continue to the simulation
+    private int _quietFrames;                       // ignore death-screen input for a moment after the prompt closes
     private readonly Rumble _rumble = new();
     private readonly HitStop _hitStop = new();
 
@@ -96,6 +101,7 @@ public sealed class InGameState : AppState, ILoadable
         _backdrop = new CityBackdrop(_content);
         // whichever suit is equipped in the Closet (all suits share the same frame layout)
         _spidey = _content.Load<Texture2D>(Costumes.Equipped(services.GetService<SaveFile>()).SpriteSheet);
+        _hazardSprites = new HazardSprites(_content);
         yield return 0.5f;
 
         _pausePolicy = services.GetService<PausePolicy>() ?? new PausePolicy();
@@ -125,7 +131,8 @@ public sealed class InGameState : AppState, ILoadable
         // Their on-screen buttons only respond while the game is the top state (not under the pause menu)
         _worldView = Show(new WorldView(Session, _gameFont, _tileset, _backdrop, _spidey, _save,
             canContinue: () => Session.World.CanContinue && CanAffordContinue(),
-            buttonsActive: () => IsTop));
+            buttonsActive: () => IsTop && _continuePrompt == null,
+            hazardSprites: _hazardSprites));
         _hud = Show(new HudLayer(_players,
             showPause: () => Session.World.Runner.State != RunnerState.Dead,
             buttonsActive: () => IsTop));
@@ -236,31 +243,39 @@ public sealed class InGameState : AppState, ILoadable
 
         // Read each player's input before running the simulation, so it responds immediately.
         // Players using a menu (e.g. the pause menu, if it doesn't stop the simulation) stand still.
-        // After dying, pressing jump continues - but only if they can pay for it, so otherwise
-        // the press is ignored (the screen tells them to press Esc for the menu)
+        // After dying, pressing jump (or clicking Continue) asks "Continue for N Spider-Essence?"
+        // first; only a yes sends the continue to the simulation. If they can't pay, nothing
+        // happens (the screen tells them to press Esc for the menu)
         var world = Session.World;
         bool dead = world.Runner.State == RunnerState.Dead;
         bool canContinue = world.CanContinue && CanAffordContinue();
+        if (!dead)
+            _continueConfirmed = false;
+        if (_quietFrames > 0)
+            _quietFrames--;
 
-        // The death screen's buttons can be clicked: Main Menu, or Continue (which is the same
-        // as pressing jump, so the simulation handles it exactly like the keyboard/gamepad)
-        bool clickedContinue = false;
-        if (dead && IsTop)
+        // The death screen's buttons can be clicked: Main Menu, or Continue (which asks first)
+        if (dead && IsTop && _continuePrompt == null && _quietFrames == 0 && !_continueConfirmed)
         {
             if (ClickedOn(_worldView.MenuButton))
             {
                 Flow.Change(new MainMenuState());
                 return;
             }
-            clickedContinue = canContinue && ClickedOn(_worldView.ContinueButton);
+
+            bool asked = ClickedOn(_worldView.ContinueButton)
+                         || _players.Any(p => p.Input.WasPressed(nameof(GameAction.Jump), Input));
+            if (asked && canContinue && world.Runner.CanContinueNow)
+                OpenContinuePrompt();
         }
 
-        bool jumpIgnored = dead && !canContinue;
         foreach (var player in _players)
         {
-            if (clickedContinue && player == _players[0])
+            // a confirmed continue holds jump for the first player until he's back up (the
+            // simulation continues on the press, and he doesn't swing from the hold)
+            if (_continueConfirmed && player == _players[0])
                 player.Commands.Submit(new PlayerCommand { Actions = ActionSet.Empty.With(GameAction.Jump) });
-            else if (!jumpIgnored && (IsTop || !Ui.Sources.Contains(player.Input)))
+            else if (!dead && (IsTop || !Ui.Sources.Contains(player.Input)))
                 player.SubmitCommand<GameAction>(Input);
             else
                 player.SubmitIdle();
@@ -277,8 +292,35 @@ public sealed class InGameState : AppState, ILoadable
         _rumble.Enabled = _settings?.Vibration ?? true;
         _rumble.Update(gameTime);
 
-        if (IsTop)
+        // not while the continue prompt is open (its Esc means "no", not "main menu")
+        if (IsTop && _continuePrompt == null && _quietFrames == 0)
             CheckForPause();
+    }
+
+    /// <summary>
+    /// Asks whether to spend Spider-Essence on a continue. Yes continues, no goes back to the
+    /// death screen
+    /// </summary>
+    private void OpenContinuePrompt()
+    {
+        var prompt = new ContinuePromptLayer(Session.World.NextContinueCost, _save?.Data.SpiderEssence);
+        prompt.Accepted += _ =>
+        {
+            _continueConfirmed = true;
+            CloseContinuePrompt();
+        };
+        prompt.Cancelled += _ => CloseContinuePrompt();
+
+        // the prompt answers to the players' controls while it's open
+        ListenTo(_players.Select(p => p.Input).ToArray());
+        _continuePrompt = _worldView.ShowPopup(prompt);
+    }
+
+    private void CloseContinuePrompt()
+    {
+        _continuePrompt = null;
+        _quietFrames = 2;       // so the key that answered it doesn't also count on the death screen
+        ListenTo(Array.Empty<InputSource>());
     }
 
     private void CheckForPause()

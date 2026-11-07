@@ -60,6 +60,11 @@ public sealed class World
     /// </summary>
     public EssenceField Essence { get; private set; }
 
+    /// <summary>
+    /// Soldiers, bullets, pylons and pumpkin bombs, plus the spider sense and combo
+    /// </summary>
+    public HazardField Hazards { get; private set; }
+
     /// <summary>Most continues a single run can use</summary>
     public const int MaxContinues = 4;
 
@@ -91,9 +96,13 @@ public sealed class World
         // orbs get their own RNG (based off the seed) so adding them didn't change what city a
         // seed makes
         Essence = new EssenceField(new DeterministicRandom(seed ^ EssenceSeedMix));
+
+        // hazards get their own RNG too, so they don't change the city or the orbs
+        Hazards = new HazardField(new DeterministicRandom(seed ^ HazardSeedMix));
     }
 
     private const ulong EssenceSeedMix = 0x9E3779B97F4A7C15;
+    private const ulong HazardSeedMix = 0xD1B54A32D192ED03;
 
     /// <summary>
     /// Finds the avatar belonging to the player, or null if they have none
@@ -117,6 +126,7 @@ public sealed class World
         Track.Resume();
         Runner.Revive(Track);
         Essence.Resume();
+        Hazards.Resume(Track);
         events.Raise(new RunContinued(tick, ContinuesUsed, cost, Track.DistanceMeters));
         return true;
     }
@@ -132,6 +142,8 @@ public sealed class World
         ContinuesUsed = 0;
         ulong essenceSeed = ((ulong)Random.NextUInt() << 32) | Random.NextUInt();
         Essence = new EssenceField(new DeterministicRandom(essenceSeed ^ EssenceSeedMix));
+        ulong hazardSeed = ((ulong)Random.NextUInt() << 32) | Random.NextUInt();
+        Hazards = new HazardField(new DeterministicRandom(hazardSeed ^ HazardSeedMix));
     }
 
     internal PlayerAvatar AddPlayer(PlayerId player)

@@ -11,7 +11,8 @@ namespace SpiderManEndless.States;
 /// </summary>
 /// <remarks>
 /// When the game first launches it opens on the title screen ("press any button"), which leads
-/// into the menu. Coming back from a run goes straight to the menu.
+/// into the menu. Coming back from a run goes straight to the menu. The menu's small "Back to
+/// Title" button goes back to the title screen.
 /// </remarks>
 public sealed class MainMenuState : AppState
 {
@@ -45,7 +46,12 @@ public sealed class MainMenuState : AppState
             },
             // Options gets the submenu music (the Closet keeps the menu music)
             onOptionsOpened: audio.PlaySubmenuMusic,
-            onOptionsClosed: audio.PlayMenuMusic));
+            onOptionsClosed: audio.PlayMenuMusic,
+            onReturnedToTitle: () =>
+            {
+                audio.PlayTitleMusic();
+                audio.PlayJump();       // he leaps back up to the web
+            }));
     }
 
     /// <summary>
