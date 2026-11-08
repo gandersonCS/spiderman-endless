@@ -147,12 +147,21 @@ public partial class WorldView : WorldLayer
     /// Where the end screen's Continue button is on screen, or null if it isn't showing.
     /// (It shows greyed out when the player can't continue; check that before acting on a click.)
     /// </summary>
-    public Rectangle? ContinueButton => _session.World.Runner.State == RunnerState.Dead ? _continueButton : null;
+    public Rectangle? ContinueButton => EndScreenShowing ? _continueButton : null;
 
     /// <summary>
     /// Where the end screen's Main Menu button is on screen, or null if it isn't showing
     /// </summary>
-    public Rectangle? MenuButton => _session.World.Runner.State == RunnerState.Dead ? _menuButton : null;
+    public Rectangle? MenuButton => EndScreenShowing ? _menuButton : null;
+
+    /// <summary>
+    /// The end screen waits this long after he dies, so you can see what got him first
+    /// (it's pointed out with a red ring)
+    /// </summary>
+    public const float EndScreenDelay = 0.7f;
+
+    private bool EndScreenShowing
+        => _session.World.Runner.State == RunnerState.Dead && _session.World.Runner.DeadSeconds >= EndScreenDelay;
 
     /// <summary>
     /// Handles sim events: a burst where essence was picked up, plus the hazard effects
@@ -246,6 +255,8 @@ public partial class WorldView : WorldLayer
         DrawBullets(camera, hazards, track);
         DrawEffects(camera, track);
         DrawSpiderSense(hazards, runner);
+        DrawWhatGotHim(camera, hazards, track, runner);
+        DrawOffscreenMarker(hazards, runner);
         DrawText(camera, track, runner);
     }
 
@@ -444,11 +455,12 @@ public partial class WorldView : WorldLayer
         DrawEssenceIcon(camera, EssenceIconCenter, EssenceIconRadius);
         DrawCombo(_session.World.Hazards);
         DrawPopups(track);
+        DrawAdaptCallout();
 
         // controls hint at the start of a run (two short lines, so it fits on screen)
         if (runner.State != RunnerState.Dead && track.DistanceMeters < 80)
         {
-            DrawCentered("CLICK: attack", new Vector2(World.Width / 2, World.Height - 92),
+            DrawCentered("Run into soldiers to take them out - jump over shields!", new Vector2(World.Width / 2, World.Height - 92),
                 Color.White, HintScale);
             DrawCentered("SPACE / A: jump  (hold to jump higher)", new Vector2(World.Width / 2, World.Height - 62),
                 Color.White, HintScale);
@@ -458,7 +470,7 @@ public partial class WorldView : WorldLayer
 
         _continueButton = null;
         _menuButton = null;
-        if (runner.State == RunnerState.Dead)
+        if (EndScreenShowing)
             DrawEndScreen(camera, track, runner);
 
         Rebegin(camera, BlendState.AlphaBlend, SamplerState.PointClamp);
@@ -708,6 +720,17 @@ public static class SpiderFrames
         Kick(422, 1162, 47, 47, 439, 1171), Kick(484, 1160, 46, 49, 501, 1170),
     };
 
+    /// <summary>
+    /// "Uppercut" on the sheet, the rising part: only played when he runs into a soldier in the
+    /// air (it's not on a button). Anchored at his feet
+    /// </summary>
+    public static readonly Frame[] Uppercut =
+    {
+        Frame.Feet(144, 1542, 34, 63), Frame.Feet(206, 1525, 28, 75), Frame.Feet(267, 1525, 29, 65),
+        Frame.Feet(328, 1515, 30, 68), Frame.Feet(391, 1510, 30, 75), Frame.Feet(454, 1515, 31, 72),
+        Frame.Feet(510, 1529, 29, 66),
+    };
+
     /// <summary>How long the air kick's first frame shows before he holds the kick pose</summary>
     private const float AirKickWindUpSeconds = 0.08f;
 
@@ -720,7 +743,12 @@ public static class SpiderFrames
         if (kind == AttackKind.AirKick)
             return AirKick[seconds < AirKickWindUpSeconds ? 0 : 1];
 
-        var frames = kind == AttackKind.Jab ? JabPunch : UpwardKick;
+        var frames = kind switch
+        {
+            AttackKind.Jab => JabPunch,
+            AttackKind.Uppercut => Uppercut,
+            _ => UpwardKick,
+        };
         float progress = seconds / Runner.DurationOf(kind);
         int index = Math.Clamp((int)(progress * frames.Length), 0, frames.Length - 1);
         return frames[index];

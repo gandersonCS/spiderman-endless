@@ -149,6 +149,9 @@ public class RunnerTests
         Assert.Equal(distanceAtDeath, session.World.Track.DistanceMeters, 6);     // same score
         Assert.Equal(essenceAtDeath, session.World.Essence.CollectedThisRun);     // same essence
         Assert.NotNull(session.World.Track.RoofAt(session.World.Track.RunnerTrackX));   // standing on a roof
+        // ...with room to run before the next edge
+        Assert.NotNull(session.World.Track.RoofAt(session.World.Track.RunnerTrackX
+            + (RooftopTrack.ResumeRunwayTiles - 1) * RooftopTrack.TileSize));
         Assert.Contains(session.Events.Pending, e => e is RunContinued);
     }
 

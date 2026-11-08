@@ -43,8 +43,27 @@ public sealed class CityBackdrop
 
     private readonly record struct Layer(Texture2D Texture, float Parallax);
 
-    /// <summary>One time of day: its layers and a color to fill anything outside the world with</summary>
-    private sealed record LayerSet(Layer[] Layers, Color Fill);
+    /// <summary>
+    /// One time of day: its layers, a color to fill anything outside the world with, and an
+    /// optional haze
+    /// </summary>
+    /// <param name="Haze">
+    /// Atmospheric haze: a wash of this color goes over each building layer (so the far ones
+    /// get the most) and once more over the whole thing. It lifts the darkest buildings away
+    /// from the dark soldiers and calms the background behind red bullets and lasers
+    /// </param>
+    /// <param name="HazePerLayer">How strong the wash over each building layer is (0 = none)</param>
+    /// <param name="HazeFinal">How strong the last wash over everything is</param>
+    private sealed record LayerSet(Layer[] Layers, Color Fill, Color Haze = default, float HazePerLayer = 0,
+        float HazeFinal = 0);
+
+    // dusk's nearest buildings are nearly the same dark navy as the task force, which made
+    // soldiers disappear against them. A soft pink-lavender haze keeps the sunset but fixes that
+    private static readonly Color DuskHaze = new(205, 160, 190);
+    private const float DuskHazePerLayer = 0.13f;
+    private const float DuskHazeFinal = 0.12f;
+
+    private Texture2D _pixel;
 
     private static readonly TimeOfDay[] Cycle = { TimeOfDay.Day, TimeOfDay.Dusk, TimeOfDay.Night };
 
@@ -92,7 +111,12 @@ public sealed class CityBackdrop
     public CityBackdrop(ContentManager content)
     {
         _sets[(int)TimeOfDay.Day] = LoadSet(content, "day", 6, new Color(35, 50, 75));
-        _sets[(int)TimeOfDay.Dusk] = LoadSet(content, "dawn", 6, new Color(14, 26, 30));
+        _sets[(int)TimeOfDay.Dusk] = LoadSet(content, "dawn", 6, new Color(14, 26, 30)) with
+        {
+            Haze = DuskHaze,
+            HazePerLayer = DuskHazePerLayer,
+            HazeFinal = DuskHazeFinal,
+        };
         _sets[(int)TimeOfDay.Night] = LoadSet(content, "night", 5, new Color(18, 18, 40));
     }
 
@@ -156,6 +180,11 @@ public sealed class CityBackdrop
     public void Draw(SpriteBatch spriteBatch, double scrollX, double meters, float left, float right)
     {
         float fade = PeriodAt(meters, Start, out var current, out var next);
+        if (_pixel == null)
+        {
+            _pixel = new Texture2D(spriteBatch.GraphicsDevice, 1, 1);
+            _pixel.SetData(new[] { Color.White });
+        }
 
         // draw the current set, then the next one on top of it, see-through by how far the fade is.
         // (textures are premultiplied, so Color.White * fade fades the whole layer)
@@ -165,10 +194,14 @@ public sealed class CityBackdrop
             DrawSet(spriteBatch, _sets[(int)next], scrollX, left, right, Color.White * fade);
     }
 
-    private static void DrawSet(SpriteBatch spriteBatch, LayerSet set, double scrollX, float left, float right, Color tint)
+    private void DrawSet(SpriteBatch spriteBatch, LayerSet set, double scrollX, float left, float right, Color tint)
     {
-        foreach (var layer in set.Layers)
+        float alpha = tint.A / 255f;
+        var screen = new Rectangle((int)MathF.Floor(left), 0, (int)MathF.Ceiling(right - left) + 1, (int)World.Height);
+        for (int i = 0; i < set.Layers.Length; i++)
         {
+            var layer = set.Layers[i];
+
             // repeat the layer across the screen, shifted by its share of the scrolling
             float offset = (float)(scrollX * layer.Parallax % ScaledWidth);
             float x = MathF.Floor((left + offset) / ScaledWidth) * ScaledWidth - offset;
@@ -179,6 +212,13 @@ public sealed class CityBackdrop
                 var destination = new Rectangle((int)MathF.Round(x), 0, (int)MathF.Ceiling(ScaledWidth) + 1, (int)World.Height);
                 spriteBatch.Draw(layer.Texture, destination, tint);
             }
+
+            // haze over each building layer (not the sky), so the ones further back get more of it
+            if (i > 0 && set.HazePerLayer > 0)
+                spriteBatch.Draw(_pixel, screen, set.Haze * (set.HazePerLayer * alpha));
         }
+
+        if (set.HazeFinal > 0)
+            spriteBatch.Draw(_pixel, screen, set.Haze * (set.HazeFinal * alpha));
     }
 }

@@ -128,3 +128,20 @@ public sealed record PumpkinExploded(long Tick, double X, float Y) : GameEvent(T
 /// (X, Y) is above his head, where the view shows the popup.
 /// </summary>
 public sealed record NearMiss(long Tick, double X, float Y, int Essence) : GameEvent(Tick);
+
+/// <summary>What the task force is set up to deal with, from how he's been playing</summary>
+public enum TaskForceFocus
+{
+    /// <summary>The start of a run: a bit of everything</summary>
+    Mixed,
+    /// <summary>He's been swinging a lot: more flyers and pumpkin bombs, at the height he swings</summary>
+    Air,
+    /// <summary>He's been on the roofs: more rooftop soldiers and pylons</summary>
+    Ground,
+}
+
+/// <summary>The task force switched focus to match how he's playing (the view shows a callout)</summary>
+public sealed record TaskForceAdapted(long Tick, TaskForceFocus Focus) : GameEvent(Tick);
+
+/// <summary>A pumpkin bomb finished its warning and launched along its line</summary>
+public sealed record PumpkinLaunched(long Tick, double X, float Y) : GameEvent(Tick);

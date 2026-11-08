@@ -55,6 +55,8 @@ public enum ThreatKind
     Shooter,
     /// <summary>A task force pylon dropping out of the sky</summary>
     FallingPylon,
+    /// <summary>A shielded soldier on the roof ahead (jump or swing over him)</summary>
+    ShieldedSoldier,
     /// <summary>A pumpkin bomb flying in from the right</summary>
     PumpkinBomb,
 }
@@ -88,6 +90,21 @@ public sealed class Enemy
 
     /// <summary>True if this one shoots at you. Shooters are dangerous to go near.</summary>
     public bool IsShooter { get; }
+
+    /// <summary>
+    /// A rooftop soldier behind a riot shield. Can't be beaten and never shoots: he's a wall
+    /// on the roof. Jump or swing over him (touching him ends the run)
+    /// </summary>
+    public bool IsShielded { get; internal init; }
+
+    /// <summary>True once a shielded soldier has set off the spider sense (it only tingles once each)</summary>
+    internal bool Sensed { get; set; }
+
+    /// <summary>True once a shielded soldier has tingled a second time, when he got close</summary>
+    internal bool SensedClose { get; set; }
+
+    /// <summary>What touching a shielded soldier means touching: him and the shield held out in front</summary>
+    public HitBox ShieldedBody => new(X - 30, Y - BodyHeight + 2, X + BodyHalfWidth - 5, Y);
 
     /// <summary>Track x of his center</summary>
     public double X { get; internal set; }
@@ -152,8 +169,14 @@ public sealed class Enemy
     /// <summary>Spider-Essence he bursts into</summary>
     internal int EssenceValue { get; set; }
 
-    /// <summary>His hurt box</summary>
+    /// <summary>His hurt box (what Spider-Man's attacks have to reach)</summary>
     public HitBox Body => HitBox.Standing(X, Y, BodyHalfWidth, BodyHeight);
+
+    /// <summary>
+    /// What Spider-Man has to touch to get tackled: a bit smaller than he looks, so brushing
+    /// past him doesn't count
+    /// </summary>
+    public HitBox ContactBody => HitBox.Standing(X, Y - 4, BodyHalfWidth - 5, BodyHeight - 12);
 
     /// <summary>Where his bullets come out (track space), for the current pose</summary>
     public (double X, float Y) Muzzle
@@ -250,8 +273,9 @@ public sealed class Pylon
 }
 
 /// <summary>
-/// A pumpkin bomb. Thrown in from the right side of the screen, flying straight across at the
-/// height he was at when it was thrown (jump over it). Blows up on whatever it hits (including you).
+/// A pumpkin bomb. Appears at the right edge of the screen at the height of his chest, hangs there
+/// with its fuse lit and its flight line shown for a moment, then launches straight left along that
+/// line (it doesn't follow him), fast. Blows up if he touches it. Blows up on whatever it hits (including you).
 /// </summary>
 public sealed class PumpkinBomb
 {
@@ -265,15 +289,37 @@ public sealed class PumpkinBomb
     {
         X = x;
         Y = y;
+        BaseY = y;
         VelocityX = vx;
+    }
+
+    /// <summary>The height of its flight line</summary>
+    public float BaseY { get; }
+
+    /// <summary>A bomb that hangs at the edge for <paramref name="warnSeconds"/>, then launches at <paramref name="speed"/></summary>
+    internal static PumpkinBomb Hovering(double x, float y, float speed, float warnSeconds)
+        => new(x, y, 0) { WarnSeconds = warnSeconds, LaunchSpeed = speed, IsLaunched = false };
+
+    /// <summary>How long it hangs before launching</summary>
+    public float WarnSeconds { get; private init; }
+
+    /// <summary>False while it's hanging at the edge of the screen (the warning)</summary>
+    public bool IsLaunched { get; private set; } = true;
+
+    private float LaunchSpeed { get; init; }
+
+    internal void Launch()
+    {
+        IsLaunched = true;
+        VelocityX = -LaunchSpeed;
     }
 
     /// <summary>Track x of its center</summary>
     public double X { get; internal set; }
     public float Y { get; internal set; }
 
-    /// <summary>Speed on screen (negative = moving left, toward him)</summary>
-    public float VelocityX { get; }
+    /// <summary>Speed on screen (negative = moving left, toward him; 0 while it hangs at the edge)</summary>
+    public float VelocityX { get; private set; }
 
     public float Age { get; internal set; }
 

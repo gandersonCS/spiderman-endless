@@ -107,8 +107,10 @@ public sealed class RooftopTrack
     // drop buildings once they're this far off the left side
     private const double DiscardMargin = 600;
 
-    // a continue puts him at least this many tiles in from both edges of a roof
+    // a continue puts him at least this many tiles in from the start of a roof, with at least
+    // ResumeRunwayTiles of roof left in front of him (so he isn't brought back right at an edge)
     private const int SafeInsetTiles = 3;
+    public const int ResumeRunwayTiles = 8;
 
     // cruising speed (units/sec) and how quickly it ramps up over a run
     public const float BaseSpeed = 360f;
@@ -190,7 +192,7 @@ public sealed class RooftopTrack
             double inset = building.StartColumn * (double)TileSize + SafeInsetTiles * TileSize;
             double last = building.EndColumn * (double)TileSize - SafeInsetTiles * TileSize;
             double spawn = Math.Max(here, inset);
-            if (spawn <= last)
+            if (last - spawn >= (ResumeRunwayTiles - SafeInsetTiles) * TileSize)
             {
                 target = spawn;
                 break;

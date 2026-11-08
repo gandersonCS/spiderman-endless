@@ -6,7 +6,7 @@ namespace SpiderManEndless.Simulation;
 
 /// <summary>
 /// Everything that's out to get him: task force soldiers (on roofs and flying), their bullets,
-/// pylons (on roofs, or dropped from the sky) and pumpkin bombs (thrown in from the right).
+/// pylons (on roofs, or dropped from the sky) and pumpkin bombs (launched along his height from the right).
 /// Also runs the spider sense, the combo, close calls, invulnerability, and the spawn director that
 /// decides what comes next.
 /// </summary>
@@ -36,11 +36,12 @@ namespace SpiderManEndless.Simulation;
 /// <para>
 /// Every threat has one move that answers it:
 /// <list type="bullet">
-/// <item>Soldier without a gun: attack (jab on a roof, kick in the air)</item>
-/// <item>Shooter: swing away (bullets are dodged by changing height; punching one between shots works, but it's a risk)</item>
+/// <item>Soldier (shooting or not): run, jump or swing into him and he goes down. Shooters' bullets are dodged by changing height</item>
+/// <item>Shielded soldier on a roof (sets off the spider sense): jump or swing over him (he can't be beaten)</item>
 /// <item>Pylon on a roof: jump over it (or onto it: the top is solid)</item>
 /// <item>Pylon dropping from the sky: swing, to get past before it lands</item>
-/// <item>Pumpkin bomb from the right: jump over it (switched off for now, see <see cref="PumpkinBombsEnabled"/>)</item>
+/// <item>Soldier in the air (shooting or not): jump or swing into him, he's uppercut automatically</item>
+/// <item>Pumpkin bomb: shows up at the right edge at his height, then launches along that line: get off the line (jump, drop or swing)</item>
 /// </list>
 /// </para>
 /// </remarks>
@@ -70,19 +71,23 @@ public sealed class HazardField
     // ---- soldiers ----
 
     /// <summary>Chance a soldier is a shooter, at the easiest and hardest</summary>
-    public const float EasyShooterChance = 0.25f;
-    public const float HardShooterChance = 0.6f;
+    public const float EasyShooterChance = 0.2f;
+    public const float HardShooterChance = 0.75f;
+
+    /// <summary>Chance a rooftop soldier has a riot shield, at the easiest and hardest</summary>
+    public const float EasyShieldChance = 0.2f;
+    public const float HardShieldChance = 0.4f;
 
     /// <summary>How long a shooter aims before firing (the spider sense warning), easiest and hardest</summary>
-    public const float EasyAimSeconds = 0.8f;
-    public const float HardAimSeconds = 0.48f;
+    public const float EasyAimSeconds = 0.85f;
+    public const float HardAimSeconds = 0.6f;
 
     /// <summary>The aim stops following him for this long before the shot, so he can dodge it</summary>
-    public const float AimLockSeconds = 0.18f;
+    public const float AimLockSeconds = 0.3f;
 
     /// <summary>Bullet speed on screen, easiest and hardest</summary>
-    public const float EasyBulletSpeed = 380f;
-    public const float HardBulletSpeed = 660f;
+    public const float EasyBulletSpeed = 340f;
+    public const float HardBulletSpeed = 560f;
 
     /// <summary>Time between shots for a shooter that fires more than once</summary>
     public const float ShotCooldownSeconds = 0.55f;
@@ -95,7 +100,20 @@ public sealed class HazardField
     /// At top speed a rooftop shooter is only in this band for about the length of one aim, and
     /// swinging past fast enough gets you by before he can shoot at all
     /// </remarks>
-    public const float MinShootAhead = 200f;
+    public const float MinShootAhead = 300f;
+
+    /// <summary>
+    /// Every bullet takes at least this long to reach him from the moment it's fired. A shooter
+    /// that's too close for that doesn't start aiming, and one that ends up too close by the time
+    /// he'd fire holds his shot
+    /// </summary>
+    public const float MinBulletReactionSeconds = 0.55f;
+
+    /// <summary>
+    /// A shooter won't start aiming while he's running toward a roof edge he'll reach within this
+    /// long, so a bullet never arrives right when he's forced to jump
+    /// </summary>
+    public const float NoShotBeforeEdgeSeconds = 1.0f;
     public const float MaxShootX = World.Width - 10f;
 
     /// <summary>How fast a flyer comes at you (on top of the scrolling), easiest and hardest</summary>
@@ -134,12 +152,25 @@ public sealed class HazardField
     // ---- pylons ----
 
     /// <summary>
-    /// How long a pylon takes to drop (the warning), easiest and hardest. Long enough to jump and
-    /// start a swing, which is the answer: it lands where he'd be if he kept running, and only a
-    /// swing's speed gets him past in time. (Jumping doesn't help: he'd still be in the same spot.)
+    /// How long a pylon takes to drop (the warning), easiest and hardest. It's shortened when he's
+    /// going fast, so it always lands on screen where he can see it (and doesn't drop at all if it
+    /// can't fall for at least <see cref="MinPylonFallSeconds"/>)
     /// </summary>
     public const float EasyPylonFallSeconds = 1.3f;
     public const float HardPylonFallSeconds = 1.0f;
+    public const float MinPylonFallSeconds = 0.7f;
+
+    /// <summary>
+    /// A dropped pylon lands this long before he'd reach it if he kept running: just in front of
+    /// him, never on him. Swing past before it lands, or jump over (or onto) it once it's down
+    /// </summary>
+    public const float PylonLandsAheadSeconds = 0.35f;
+
+    /// <summary>
+    /// A dropped pylon's landing spot can start out at most this far past the right edge of the
+    /// screen (it scrolls into view, with its red warning column, before it lands)
+    /// </summary>
+    public const float PylonDropBeyondScreen = 500f;
 
     /// <summary>Falling pylons start showing up at this difficulty (about 120 m in)</summary>
     public const float FallingPylonStartDifficulty = 0.03f;
@@ -153,21 +184,42 @@ public sealed class HazardField
     // ---- pumpkin bombs ----
 
     /// <summary>
-    /// Pumpkin bombs are switched off for now (too many deaths felt unavoidable). Everything else
-    /// about them still works; set this to true to bring them back
+    /// Pumpkin bombs: the danger up in the air (flyers that don't shoot are just essence now).
+    /// They float in from the right, above the height of even a full jump, so running and
+    /// jumping on the roofs is always safe from them; they're only in the way of swinging. The
+    /// answer is to swing around them: under, over, or not until they've gone by.
+    /// Set this to false to switch them off
     /// </summary>
-    public static readonly bool PumpkinBombsEnabled = false;
+    public static readonly bool PumpkinBombsEnabled = true;
 
-    /// <summary>Speed of a pumpkin bomb (on screen), easiest and hardest</summary>
-    public const float EasyPumpkinSpeed = 330f;
-    public const float HardPumpkinSpeed = 600f;
+    /// <summary>
+    /// A bomb shows up at the right edge and hangs there, fuse lit, with its flight line drawn
+    /// across the screen, for this long (easiest and hardest)...
+    /// </summary>
+    public const float EasyPumpkinWarnSeconds = 0.9f;
+    public const float HardPumpkinWarnSeconds = 0.6f;
 
-    /// <summary>Least warning a pumpkin bomb gives (time from being thrown to reaching him), easiest and hardest</summary>
-    public const float EasyPumpkinWarningSeconds = 1.1f;
-    public const float HardPumpkinWarningSeconds = 0.75f;
+    /// <summary>...then launches straight along that line this fast (on screen), easiest and hardest</summary>
+    public const float EasyPumpkinSpeed = 650f;
+    public const float HardPumpkinSpeed = 950f;
 
-    /// <summary>Things that fall start this far above the top of the screen</summary>
-    public const float DropStartY = -90f;
+    /// <summary>The spider sense only goes off for a bomb whose line is within this of his chest</summary>
+    public const float PumpkinLaneWarnDistance = 70f;
+
+    /// <summary>A bomb's line is at least this far below the top of the screen</summary>
+    public const float PumpkinTopMargin = 36f;
+
+    /// <summary>How much they bob up and down as they float</summary>
+    public const float PumpkinBob = 7f;
+
+    /// <summary>Pumpkin bombs start showing up at this difficulty (about 190 m in)</summary>
+    public const float PumpkinStartDifficulty = 0.08f;
+
+    /// <summary>
+    /// Where a dropped pylon's bottom starts: just inside the top of the screen, so it's in view
+    /// for the whole drop (not hidden above the screen for half of it)
+    /// </summary>
+    public const float DropStartY = 20f;
 
     // ---- fairness ----
 
@@ -221,7 +273,24 @@ public sealed class HazardField
     public const float RunnerHeight = 54f;
 
     /// <summary>Bullets count as this big for hitting him</summary>
-    public const float BulletRadius = 3f;
+    public const float BulletRadius = 1f;
+
+    // what has to touch him for him to die is smaller than he looks, so a graze that looks like a
+    // miss is a miss (close calls still use his full body, so grazes are rewarded instead)
+    public const float LethalHalfWidth = 7f;
+    public const float LethalHeight = 42f;
+    public const float LethalFeetInset = 3f;
+
+    /// <summary>
+    /// Running into the side of a landed pylon pops him up onto it, instead of killing him, if his
+    /// feet are this close to its top...
+    /// </summary>
+    public const float VaultReach = 36f;
+    /// <summary>...or if he only just landed (he couldn't have jumped yet)</summary>
+    public const float VaultAfterLandingSeconds = 0.3f;
+
+    /// <summary>He's been on the ground this long (0 while in the air; starts high, since he didn't just land)</summary>
+    private float _groundedSeconds = 10f;
 
     private readonly DeterministicRandom _random;
     private readonly List<Enemy> _enemies = new();
@@ -265,6 +334,32 @@ public sealed class HazardField
 
     /// <summary>Soldiers beaten this run</summary>
     public int Defeated { get; private set; }
+
+    /// <summary>
+    /// What the task force is set up for right now, from how he's been playing. Changes (with a
+    /// <see cref="TaskForceAdapted"/> event the view shows) once he clearly favors the air or the roofs
+    /// </summary>
+    public TaskForceFocus Focus { get; private set; } = TaskForceFocus.Mixed;
+
+    /// <summary>He's in the air this much of the time (or less, for the roofs) before the task force switches</summary>
+    public const float AirFocusShare = 0.65f;
+    public const float GroundFocusShare = 0.3f;
+
+    /// <summary>
+    /// When the task force switches focus, the next few spawns come quickly and match it, so the
+    /// switch is felt right away
+    /// </summary>
+    public const int FocusSurgeSpawns = 3;
+    private int _surgeLeft;
+
+    /// <summary>Tests can turn off the hold-fire-before-an-edge rule</summary>
+    internal bool HoldFireBeforeEdges { get; set; } = true;
+
+    /// <summary>
+    /// Where the thing that ended the run was (track space), so the view can point it out before
+    /// the end screen comes up. Null if a hazard didn't do it (he fell, or hit a wall)
+    /// </summary>
+    public (double X, float Y)? KilledBy { get; private set; }
 
     /// <summary>Close calls this run</summary>
     public int NearMisses { get; private set; }
@@ -337,7 +432,10 @@ public sealed class HazardField
         InvulnerableSeconds = MathF.Max(0, InvulnerableSeconds - dt);
 
         if (alive)
+        {
             Adapt(runner, dt);
+            UpdateFocus(track, events, tick);
+        }
 
         if (alive && track.IsScrolling && track.DistanceMeters >= StartMeters)
             RunDirector(track, runner, events, tick, dt);
@@ -384,6 +482,9 @@ public sealed class HazardField
         InvulnerableSeconds = 0;
         SpiderSenseActive = false;
         SpiderSenseSeconds = 0;
+        KilledBy = null;
+        _groundedSeconds = 10f;
+        _surgeLeft = 0;
         UpdatePlatforms(track);
     }
 
@@ -398,6 +499,8 @@ public sealed class HazardField
     /// <summary>Tracks how much he's in the air and how high, so the spawns can match how he plays</summary>
     private void Adapt(Runner runner, float dt)
     {
+        _groundedSeconds = runner.State == RunnerState.Running ? _groundedSeconds + dt : 0;
+
         float inAir = runner.State == RunnerState.Running ? 0 : 1;
         AirShare += (inAir - AirShare) * (1 - MathF.Exp(-dt / AdaptSeconds));
 
@@ -407,6 +510,26 @@ public sealed class HazardField
             _hasAverageFeetY = true;
         }
         _averageFeetY += (runner.FeetY - _averageFeetY) * (1 - MathF.Exp(-dt / HeightAverageSeconds));
+    }
+
+    /// <summary>Switches the task force's focus when he clearly changes how he plays</summary>
+    private void UpdateFocus(RooftopTrack track, EventQueue<GameEvent> events, long tick)
+    {
+        if (track.DistanceMeters < StartMeters)
+            return;
+
+        var focus = Focus;
+        if (AirShare >= AirFocusShare)
+            focus = TaskForceFocus.Air;
+        else if (AirShare <= GroundFocusShare)
+            focus = TaskForceFocus.Ground;
+        if (focus == Focus)
+            return;
+
+        Focus = focus;
+        _surgeLeft = FocusSurgeSpawns;
+        _spawnIn = MathF.Min(_spawnIn, 0.6f);
+        events.Raise(new TaskForceAdapted(tick, focus));
     }
 
     /// <summary>The landed pylons' tops are solid, like roofs</summary>
@@ -436,7 +559,7 @@ public sealed class HazardField
             return;
 
         float d = _difficulty;
-        var kind = PickSpawn(d);
+        var kind = _surgeLeft > 0 ? PickSurgeSpawn(d) : PickSpawn(d);
         bool spawned = kind switch
         {
             SpawnKind.RooftopSoldier => TrySpawnRooftopSoldier(track, d),
@@ -447,10 +570,25 @@ public sealed class HazardField
             _ => false,
         };
 
-        // didn't fit anywhere fair (no roof, too crowded, too many threats): try again shortly
-        _spawnIn = spawned
-            ? Lerp(EasySpawnSeconds, HardSpawnSeconds, d) * _random.NextFloat(0.75f, 1.25f)
-            : 0.2f;
+        // didn't fit anywhere fair (no roof, too crowded, too many threats): try again shortly.
+        // a surge comes quicker
+        if (spawned && _surgeLeft > 0)
+            _surgeLeft--;
+        float gap = Lerp(EasySpawnSeconds, HardSpawnSeconds, d) * _random.NextFloat(0.75f, 1.25f);
+        _spawnIn = !spawned ? 0.2f : _surgeLeft > 0 ? gap * 0.45f : gap;
+    }
+
+    /// <summary>Right after the task force switches focus: units that match it</summary>
+    private SpawnKind PickSurgeSpawn(float d)
+    {
+        if (Focus == TaskForceFocus.Air)
+        {
+            bool bombsReady = PumpkinBombsEnabled && d >= PumpkinStartDifficulty;
+            return bombsReady && _random.Chance(0.35f) ? SpawnKind.PumpkinBomb : SpawnKind.Flyer;
+        }
+        if (Focus == TaskForceFocus.Ground)
+            return _random.Chance(0.6f) ? SpawnKind.RooftopSoldier : SpawnKind.GroundPylon;
+        return PickSpawn(d);
     }
 
     internal SpawnKind PickSpawn(float d)
@@ -460,11 +598,13 @@ public sealed class HazardField
         // later in the run. the falling pylons and bombs ease in after a bit
         float air = AirShare, ground = 1 - AirShare;
         Span<float> weights = stackalloc float[5];
-        weights[(int)SpawnKind.RooftopSoldier] = 0.5f + 3f * ground;
-        weights[(int)SpawnKind.Flyer] = (0.5f + 3.5f * air) * (1 + 0.5f * d);
-        weights[(int)SpawnKind.GroundPylon] = 0.3f + 2f * ground;
-        weights[(int)SpawnKind.FallingPylon] = d < FallingPylonStartDifficulty ? 0 : (0.8f + 1.5f * ground) * (1 + d);
-        weights[(int)SpawnKind.PumpkinBomb] = !PumpkinBombsEnabled || d < 0.12f ? 0 : 0.6f + 2f * d + air;
+        // there's always a solid share of rooftop stuff (that's where he lands, and where combos
+        // start); how he plays tilts the mix
+        weights[(int)SpawnKind.RooftopSoldier] = 2f + 2.5f * ground;
+        weights[(int)SpawnKind.Flyer] = (0.8f + 2.2f * air) * (1 + 0.5f * d);
+        weights[(int)SpawnKind.GroundPylon] = 0.8f + 1.5f * ground;
+        weights[(int)SpawnKind.FallingPylon] = d < FallingPylonStartDifficulty ? 0 : (0.8f + 1.2f * ground) * (1 + d);
+        weights[(int)SpawnKind.PumpkinBomb] = !PumpkinBombsEnabled || d < PumpkinStartDifficulty ? 0 : (0.2f + 2.2f * air) * (1 + d);
 
         float total = 0;
         foreach (float w in weights)
@@ -488,12 +628,15 @@ public sealed class HazardField
         if (FindGroundSpot(track, SpawnX(track), out double x, out float roof) is false)
             return false;
 
-        bool shooter = _random.Chance(Lerp(EasyShooterChance, HardShooterChance, d));
-        // shooters hold their ground; the rest run at you
-        float speed = shooter ? 0 : Lerp(EasyRunnerSpeed, HardRunnerSpeed, d) * _random.NextFloat(0.7f, 1.1f);
+        // shielded soldiers hold their ground and never shoot; of the rest, shooters hold their
+        // ground and the others run at you
+        bool shielded = _random.Chance(Lerp(EasyShieldChance, HardShieldChance, d));
+        bool shooter = !shielded && _random.Chance(Lerp(EasyShooterChance, HardShooterChance, d));
+        float speed = shooter || shielded ? 0 : Lerp(EasyRunnerSpeed, HardRunnerSpeed, d) * _random.NextFloat(0.7f, 1.1f);
         var enemy = new Enemy(_nextId++, EnemyKind.Rooftop, shooter, x, roof, speed)
         {
             IsRunning = speed > 0,
+            IsShielded = shielded,
         };
         _enemies.Add(enemy);
         return true;
@@ -526,18 +669,28 @@ public sealed class HazardField
     }
 
     /// <summary>
-    /// Drops a pylon straight down at the spot he'll reach when it lands, if he keeps running at
-    /// the speed he is now. It never moves sideways or follows him after that. The answer is to
-    /// swing: the swing's speed carries him past before it lands (and it's a close call)
+    /// Drops a pylon straight down onto the roof just in front of where he'll be when it lands
+    /// (if he keeps running at the speed he is now). It never moves sideways or follows him.
+    /// Only while he's running on a roof (so the prediction is right and he can still jump or
+    /// swing), and only where it lands on screen
     /// </summary>
     private bool TrySpawnFallingPylon(RooftopTrack track, Runner runner, float d, EventQueue<GameEvent> events, long tick)
     {
-        // not while he's already dealing with something else
-        if (CountThreats() >= MaxThreats)
+        // not while he's already dealing with something else, or mid-swing (his speed changes
+        // through a swing, so where he'll be can't be predicted)
+        if (CountThreats() >= MaxThreats || runner.State == RunnerState.Swinging)
             return false;
 
-        float seconds = Lerp(EasyPylonFallSeconds, HardPylonFallSeconds, d);
-        double target = track.RunnerTrackX + track.Speed * seconds;
+        // going fast shortens the drop so the spot isn't too far off screen, and if it would be
+        // too short, don't drop one
+        float speed = MathF.Max(1f, track.Speed);
+        float reach = World.Width + PylonDropBeyondScreen - RooftopTrack.RunnerX;
+        float seconds = MathF.Min(Lerp(EasyPylonFallSeconds, HardPylonFallSeconds, d),
+            reach / speed - PylonLandsAheadSeconds);
+        if (seconds < MinPylonFallSeconds)
+            return false;
+
+        double target = track.RunnerTrackX + speed * (seconds + PylonLandsAheadSeconds);
         if (DropSpot(track, target) is not float roof || GroundClutterNear(target, Pylon.HalfWidth * 6))
             return false;
 
@@ -558,29 +711,35 @@ public sealed class HazardField
     }
 
     /// <summary>
-    /// Throws a pumpkin bomb in from the right, straight at his chest height. It gives the same
-    /// warning whatever its speed: it starts further ahead the faster it is
+    /// Puts a pumpkin bomb at the right edge of the screen, at the height of his chest right now.
+    /// That height is its flight line, fixed: it hangs there with the line drawn (the warning),
+    /// then launches straight along it. If he's still on the line when it launches, the spider
+    /// sense goes off. Get off the line: jump over it, drop under it, or swing past it
     /// </summary>
-    private bool TrySpawnPumpkin(RooftopTrack track, Runner runner, float d, EventQueue<GameEvent> events, long tick)
+    internal bool TrySpawnPumpkin(RooftopTrack track, Runner runner, float d, EventQueue<GameEvent> events, long tick)
     {
         if (CountThreats() >= MaxThreats)
             return false;
 
-        float y = runner.FeetY - RunnerHeight * 0.45f;
-        float speed = Lerp(EasyPumpkinSpeed, HardPumpkinSpeed, d);
-        float warning = Lerp(EasyPumpkinWarningSeconds, HardPumpkinWarningSeconds, d);
-        // it comes in from just off the right edge, never pops in mid-screen (so at slower
-        // speeds the warning is longer than this)
-        double x = Math.Max(track.RunnerTrackX + speed * warning, track.ScrollX + World.Width + 30);
+        // the line is wherever his chest is right now
+        float y = Math.Max(runner.FeetY - RunnerHeight / 2, PumpkinTopMargin);
 
-        // don't throw it if there's a building in the way right where it starts (it'd just blow up)
-        if (track.RoofAt(x) is float roof && roof < y + PumpkinBomb.Radius)
+        // it hangs on screen first (so it's never off to the side where you can't see it), and not
+        // inside a building
+        double x = track.ScrollX + World.Width - 30;
+        if (track.RoofAt(x) is float roof && roof < y + PumpkinBomb.Radius + PumpkinBob)
             return false;
 
-        _pumpkins.Add(new PumpkinBomb(x, y, -speed));
-        events.Raise(new SpiderSenseTriggered(tick, ThreatKind.PumpkinBomb));
+        float speed = Lerp(EasyPumpkinSpeed, HardPumpkinSpeed, d);
+        float warn = Lerp(EasyPumpkinWarnSeconds, HardPumpkinWarnSeconds, d);
+        var bomb = PumpkinBomb.Hovering(x, y, speed, warn);
+        _pumpkins.Add(bomb);
         return true;
     }
+
+    /// <summary>True if a bomb's flight line passes near his chest</summary>
+    private static bool InLane(PumpkinBomb bomb, Runner runner)
+        => MathF.Abs(bomb.BaseY - (runner.FeetY - RunnerHeight / 2)) <= PumpkinLaneWarnDistance;
 
     /// <summary>
     /// The building at a track x and the gap (in tiles) right before it, or null if it's a gap
@@ -737,18 +896,45 @@ public sealed class HazardField
             if (!alive)
                 continue;
 
-            // attack first, so running into one while attacking beats him instead of killing you
-            if (runner.IsAttacking && AttackBox(track, runner).Overlaps(enemy.Body))
+            // a shielded soldier is a wall: touching him ends the run, nothing beats him
+            if (enemy.IsShielded)
             {
+                // spider sense as soon as he comes on screen
+                if (!enemy.Sensed && enemy.X - track.ScrollX <= World.Width - 20)
+                {
+                    enemy.Sensed = true;
+                    events.Raise(new SpiderSenseTriggered(tick, ThreatKind.ShieldedSoldier));
+                }
+
+                // ...and again when he's close, unless he's already above him (jumping or swinging over)
+                bool closeAhead = enemy.X - track.RunnerTrackX <= ShieldCloseWarning && enemy.X > track.RunnerTrackX;
+                if (!enemy.SensedClose && closeAhead && runner.FeetY > enemy.Y - Enemy.BodyHeight)
+                {
+                    enemy.SensedClose = true;
+                    events.Raise(new SpiderSenseTriggered(tick, ThreatKind.ShieldedSoldier));
+                }
+
+                if (!IsInvulnerable && LethalBox(track, runner).Overlaps(enemy.ShieldedBody))
+                {
+                    Kill(track, runner, RunEndReason.Tackled, enemy.X, enemy.Y - Enemy.BodyHeight / 2);
+                    alive = false;
+                }
+                continue;
+            }
+
+            // everyone else goes down on contact: a punch on the roof, an uppercut in the air
+            // (there's no attack button). The attack box still counts too, for the attack action
+            bool contact = body.Overlaps(enemy.Body)
+                           || (runner.IsAttacking && AttackBox(track, runner).Overlaps(enemy.Body));
+            if (contact)
+            {
+                var enemyBody = enemy.Body;
+                runner.AutoAttack(ContactAttack(runner.State == RunnerState.Running,
+                    runner.FeetY - RunnerHeight / 2, (enemyBody.Top + enemyBody.Bottom) / 2));
                 Defeat(enemy, events, tick);
                 continue;
             }
 
-            if (!IsInvulnerable && body.Overlaps(enemy.Body))
-            {
-                runner.Kill(track, RunEndReason.Tackled);
-                alive = false;
-            }
         }
     }
 
@@ -756,8 +942,11 @@ public sealed class HazardField
     {
         if (enemy.Kind == EnemyKind.Flyer)
         {
-            // shooters hang back to shoot, the rest fly straight at you
-            double vx = enemy.IsShooter ? track.Speed * FlyingShooterKeepUp : -enemy.Speed;
+            // shooters hang back to shoot (and hold their spot on screen while aiming, so they
+            // can't drift in close and fire point-blank), the rest fly straight at you
+            double vx = !enemy.IsShooter ? -enemy.Speed
+                : enemy.IsAiming ? track.Speed
+                : track.Speed * FlyingShooterKeepUp;
             enemy.X += vx * dt;
             enemy.Y = enemy.HoverY + 8f * MathF.Sin(enemy.Age * 3.1f + enemy.Id);
             return;
@@ -801,8 +990,12 @@ public sealed class HazardField
         if (!enemy.IsAiming)
         {
             enemy.Cooldown = MathF.Max(0, enemy.Cooldown - dt);
+            // one shooter at a time: nobody starts aiming while someone else is aiming or a bullet
+            // is still in the air, so dodging one shot never throws him into the next
             int maxShots = _difficulty < 0.5f ? 1 : 2;
-            if (enemy.Cooldown > 0 || enemy.ShotsFired >= maxShots || CountThreats() >= MaxThreats)
+            if (enemy.Cooldown > 0 || enemy.ShotsFired >= maxShots || CountThreats() >= MaxThreats
+                || _bullets.Count > 0 || AnotherShooterAiming(enemy) || EdgeComingUp(track, runner)
+                || !FarEnoughToShoot(enemy, track, runner))
                 return;
 
             // start aiming: this is the warning
@@ -823,7 +1016,52 @@ public sealed class HazardField
         }
 
         if (enemy.AimSeconds >= enemy.AimDuration)
-            Fire(enemy, events, tick);
+        {
+            if (FarEnoughToShoot(enemy, track, runner))
+                Fire(enemy, events, tick);
+            else
+            {
+                // he got too close during the aim: no point-blank shot
+                enemy.AimSeconds = -1;
+                enemy.AimLocked = false;
+                enemy.Cooldown = ShotCooldownSeconds;
+            }
+        }
+    }
+
+    /// <summary>True if he's running and the roof changes (an edge or a gap) within a second or so</summary>
+    private bool EdgeComingUp(RooftopTrack track, Runner runner)
+    {
+        if (!HoldFireBeforeEdges || runner.State != RunnerState.Running)
+            return false;
+        float? here = track.RoofAt(track.RunnerTrackX);
+        double ahead = track.Speed * NoShotBeforeEdgeSeconds;
+        for (double x = RooftopTrack.TileSize; x <= ahead; x += RooftopTrack.TileSize)
+        {
+            if (track.RoofAt(track.RunnerTrackX + x) != here)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>True if a bullet fired now would take at least <see cref="MinBulletReactionSeconds"/> to reach his chest</summary>
+    private bool FarEnoughToShoot(Enemy enemy, RooftopTrack track, Runner runner)
+    {
+        var muzzle = enemy.Muzzle;
+        float dx = (float)(muzzle.X - track.RunnerTrackX);
+        float dy = muzzle.Y - (runner.FeetY - RunnerHeight / 2);
+        float speed = Lerp(EasyBulletSpeed, HardBulletSpeed, _difficulty);
+        return MathF.Sqrt(dx * dx + dy * dy) >= speed * MinBulletReactionSeconds;
+    }
+
+    private bool AnotherShooterAiming(Enemy shooter)
+    {
+        foreach (var enemy in _enemies)
+        {
+            if (enemy != shooter && enemy.IsAiming)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>Points the gun at his chest and picks the matching frame</summary>
@@ -916,15 +1154,18 @@ public sealed class HazardField
 
             if (runner.State != RunnerState.Dead)
             {
-                // how far it is from touching him (negative = it's touching him)
+                // close calls go by his whole body, the hit by the smaller lethal box
                 float gap = RunnerBox(track, runner).DistanceTo(bullet.X, bullet.Y) - BulletRadius;
                 bullet.Closest = MathF.Min(bullet.Closest, gap);
-                if (gap <= 0 && !IsInvulnerable)
+                bool hit = LethalBox(track, runner).DistanceTo(bullet.X, bullet.Y) <= BulletRadius;
+                if (hit && !IsInvulnerable)
                 {
                     _bullets.RemoveAt(i--);
-                    runner.Kill(track, RunEndReason.Shot);
+                    Kill(track, runner, RunEndReason.Shot, bullet.X, bullet.Y);
                     continue;
                 }
+                if (hit)
+                    bullet.Closest = 0;     // went through him while he was invulnerable: not a close call
             }
 
             // off screen: it missed
@@ -951,9 +1192,9 @@ public sealed class HazardField
 
             if (pylon.IsFalling)
             {
-                // straight down, speeding up as it falls (y = start + distance * t^2), landing right on time
+                // straight down, speeding up a little as it falls, landing right on time
                 float t = pylon.FallProgress;
-                pylon.Y = pylon.StartY + (pylon.RoofY - pylon.StartY) * t * t;
+                pylon.Y = pylon.StartY + (pylon.RoofY - pylon.StartY) * (0.4f * t + 0.6f * t * t);
                 if (t >= 1)
                 {
                     pylon.Y = pylon.RoofY;
@@ -970,13 +1211,23 @@ public sealed class HazardField
 
             var body = RunnerBox(track, runner);
             float gap = body.DistanceTo(pylon.Box);
+            bool touching = LethalBox(track, runner).Overlaps(pylon.Box);
 
-            // the top is solid (he lands and runs on it, see RooftopTrack.Platforms), so only
-            // hitting it from the side (his feet well below the top) or having it land on him counts
+            // the top is solid (he lands and runs on it, see RooftopTrack.Platforms)
             bool onTop = !wasFalling && runner.FeetY <= pylon.Top + Runner.StepTolerance;
-            if (gap <= 0 && !onTop && !IsInvulnerable)
+
+            // ran into the side of a landed pylon near its top, or just after landing in front of
+            // it with no time to jump: pop him up onto it instead
+            if (touching && !wasFalling && !onTop
+                && (runner.FeetY <= pylon.Top + VaultReach || _groundedSeconds < VaultAfterLandingSeconds))
             {
-                runner.Kill(track, wasFalling ? RunEndReason.Crushed : RunEndReason.HitPylon);
+                runner.VaultOnto(track, pylon.Top);
+                continue;
+            }
+
+            if (touching && !onTop && !IsInvulnerable)
+            {
+                Kill(track, runner, wasFalling ? RunEndReason.Crushed : RunEndReason.HitPylon, pylon.X, pylon.Top);
                 continue;
             }
 
@@ -999,29 +1250,41 @@ public sealed class HazardField
         {
             var bomb = _pumpkins[i];
             bomb.Age += dt;
+            if (!bomb.IsLaunched)
+            {
+                // hanging at the edge of the screen, bobbing, until it launches
+                bomb.X += scrollDelta;
+                bomb.Y = bomb.BaseY + PumpkinBob * MathF.Sin(bomb.Age * 7f);
+                if (bomb.Age >= bomb.WarnSeconds)
+                {
+                    bomb.Launch();
+                    events.Raise(new PumpkinLaunched(tick, bomb.X, bomb.Y));
+                    if (runner.State != RunnerState.Dead && InLane(bomb, runner))
+                        events.Raise(new SpiderSenseTriggered(tick, ThreatKind.PumpkinBomb));
+                }
+                continue;
+            }
+
+            // launched: dead straight along its line, so where it'll go is never a surprise
             bomb.X += bomb.VelocityX * dt + scrollDelta;
+            bomb.Y = bomb.BaseY;
 
             bool hitRoof = track.RoofAt(bomb.X) is float roof && bomb.Y + PumpkinBomb.Radius > roof;
             bool alive = runner.State != RunnerState.Dead;
-            float distance = RunnerBox(track, runner).DistanceTo(bomb.X, bomb.Y);
-            bool hitHim = alive && distance <= PumpkinBomb.Radius;
 
+            // close calls go by his whole body, getting blown up needs the bomb to touch the
+            // smaller lethal box
+            float gap = RunnerBox(track, runner).DistanceTo(bomb.X, bomb.Y) - PumpkinBomb.Radius;
+            bool hitHim = alive && LethalBox(track, runner).DistanceTo(bomb.X, bomb.Y) <= PumpkinBomb.Radius;
             if (alive)
-                bomb.Closest = MathF.Min(bomb.Closest, distance - PumpkinBomb.BlastRadius);
+                bomb.Closest = MathF.Min(bomb.Closest, hitHim ? 0 : gap);
 
             if (hitHim || hitRoof)
             {
                 _pumpkins.RemoveAt(i--);
                 events.Raise(new PumpkinExploded(tick, bomb.X, bomb.Y));
-
-                // the blast reaches a bit past the bomb itself
-                if (alive && distance <= PumpkinBomb.BlastRadius)
-                {
-                    if (!IsInvulnerable)
-                        runner.Kill(track, RunEndReason.Blasted);
-                }
-                else
-                    CloseCall(bomb.Closest, bomb.X, bomb.Y, track, runner, essence, events, tick);
+                if (hitHim && !IsInvulnerable)
+                    Kill(track, runner, RunEndReason.Blasted, bomb.X, bomb.Y);
                 continue;
             }
 
@@ -1058,9 +1321,48 @@ public sealed class HazardField
         events.Raise(new NearMiss(tick, track.RunnerTrackX, runner.FeetY - RunnerHeight, value));
     }
 
-    /// <summary>His hurt box this tick</summary>
+    /// <summary>Ends the run and remembers what did it</summary>
+    private void Kill(RooftopTrack track, Runner runner, RunEndReason reason, double x, float y)
+    {
+        if (runner.State == RunnerState.Dead)
+            return;
+        KilledBy = (x, y);
+        runner.Kill(track, reason);
+    }
+
+    /// <summary>A shielded soldier tingles the spider sense a second time when he's this close ahead</summary>
+    public const float ShieldCloseWarning = 260f;
+
+    /// <summary>A soldier this much higher or lower than him (middle to middle) counts as above or below</summary>
+    public const float ContactHeightBand = 16f;
+
+    /// <summary>
+    /// Which attack plays when he touches a soldier, so the fights don't all look the same: on a
+    /// roof a jab; in the air a low (dive) kick if the soldier's below him, an upward kick if he's
+    /// level, and an uppercut if he's above
+    /// </summary>
+    /// <param name="onGround">True if he's running on a roof</param>
+    /// <param name="myMiddleY">Y of the middle of his body</param>
+    /// <param name="enemyMiddleY">Y of the middle of the soldier's body</param>
+    public static AttackKind ContactAttack(bool onGround, float myMiddleY, float enemyMiddleY)
+    {
+        if (onGround)
+            return AttackKind.Jab;
+        float below = enemyMiddleY - myMiddleY;      // positive: the soldier is lower down
+        if (below > ContactHeightBand)
+            return AttackKind.AirKick;
+        if (below < -ContactHeightBand)
+            return AttackKind.Uppercut;
+        return AttackKind.UpwardKick;
+    }
+
+    /// <summary>His whole body this tick (for close calls)</summary>
     public static HitBox RunnerBox(RooftopTrack track, Runner runner)
         => HitBox.Standing(track.RunnerTrackX, runner.FeetY, RunnerHalfWidth, RunnerHeight);
+
+    /// <summary>What has to be touched for him to die: a bit smaller than he looks</summary>
+    public static HitBox LethalBox(RooftopTrack track, Runner runner)
+        => HitBox.Standing(track.RunnerTrackX, runner.FeetY - LethalFeetInset, LethalHalfWidth, LethalHeight);
 
     /// <summary>
     /// Where his attack reaches: in front of him, a bit taller than his body. Kicks reach a little
@@ -1127,6 +1429,16 @@ public sealed class HazardField
                 Consider(muzzle.X, muzzle.Y, 0.6f * Math.Clamp(enemy.AimSeconds / enemy.AimDuration, 0f, 1f));
             }
         }
+        foreach (var enemy in _enemies)
+        {
+            // shielded soldiers on screen ahead of him, more urgent the closer they get
+            if (enemy.IsShielded && !enemy.IsKnocked && enemy.X > headX - 10
+                && enemy.X - track.ScrollX <= World.Width - 20)
+            {
+                float closeness = Math.Clamp(1 - (float)(enemy.X - headX) / 600f, 0f, 1f);
+                Consider(enemy.X, enemy.Y - Enemy.BodyHeight / 2, 0.35f + 0.5f * closeness);
+            }
+        }
         foreach (var bullet in _bullets)
         {
             float distance = (float)Math.Abs(bullet.X - headX) + MathF.Abs(bullet.Y - headY);
@@ -1140,9 +1452,9 @@ public sealed class HazardField
         }
         foreach (var bomb in _pumpkins)
         {
-            // coming at him until it's gone past
-            if (bomb.X > headX - 20)
-                Consider(bomb.X, bomb.Y, Math.Clamp(1 - (float)(bomb.X - headX) / 650f, 0f, 1f));
+            // only launched bombs whose line goes through him, coming at him until they've gone past
+            if (bomb.IsLaunched && bomb.X > headX - 20 && InLane(bomb, runner))
+                Consider(bomb.X, bomb.Y, 0.5f + 0.5f * Math.Clamp(1 - (float)(bomb.X - headX) / 650f, 0f, 1f));
         }
 
         if (bestUrgency < 0)

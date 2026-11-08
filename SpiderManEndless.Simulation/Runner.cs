@@ -29,6 +29,11 @@ public enum AttackKind
     UpwardKick,
     /// <summary>In the air, falling: air kick</summary>
     AirKick,
+    /// <summary>
+    /// Only from running into a soldier in the air (or just after landing): he uppercuts him
+    /// automatically. Not something the attack button does
+    /// </summary>
+    Uppercut,
 }
 
 /// <summary>
@@ -99,6 +104,26 @@ public sealed class Runner
     /// <summary>Cap on how much faster than your current speed a swing can launch you</summary>
     public const float MaxEntryBoost = 1.5f;
 
+    /// <summary>
+    /// Chained swings can't push him faster than this many times the cruising speed. Without a
+    /// cap each swing launched off the last one's speed, so a long chain kept speeding up until
+    /// things came across the screen too fast to react to. Raise it for more speed, lower it for
+    /// more control
+    /// </summary>
+    public const float MaxSwingSpeedRatio = 1.7f;
+
+    /// <summary>
+    /// A swing's lowest point stays at least this far above the roofs it passes over, so a swing
+    /// never drags him into the side of the next building
+    /// </summary>
+    public const float SwingRoofClearance = 12f;
+
+    /// <summary>
+    /// Ledge grab: hitting the side of a roof with his hands still above its edge (his feet up to
+    /// this far below the top) pulls him up onto it instead of ending the run
+    /// </summary>
+    public const float MantleReach = HandHeight + 16f;
+
     /// <summary>Fraction of upward speed kept on release, otherwise he rockets off the top of the screen</summary>
     public const float ReleaseUpFraction = 0.4f;
     /// <summary>How long after dying before a button press counts as "continue"</summary>
@@ -108,6 +133,7 @@ public sealed class Runner
     public const float JabSeconds = 0.32f;
     public const float UpwardKickSeconds = 0.35f;
     public const float AirKickSeconds = 0.30f;
+    public const float UppercutSeconds = 0.32f;
     /// <summary>An attack press this close to the end of the current attack starts the next one right after</summary>
     public const float AttackBufferSeconds = 0.12f;
 
@@ -182,6 +208,7 @@ public sealed class Runner
         AttackKind.Jab => JabSeconds,
         AttackKind.UpwardKick => UpwardKickSeconds,
         AttackKind.AirKick => AirKickSeconds,
+        AttackKind.Uppercut => UppercutSeconds,
         _ => 0f,
     };
 
@@ -256,7 +283,8 @@ public sealed class Runner
         {
             AttackSeconds += dt;
             bool onGround = State == RunnerState.Running;
-            bool wrongPlace = (Attack == AttackKind.Jab) != onGround;
+            // a jab only on a roof, kicks only in the air (the uppercut plays out wherever it started)
+            bool wrongPlace = Attack != AttackKind.Uppercut && (Attack == AttackKind.Jab) != onGround;
             if (wrongPlace || AttackSeconds >= DurationOf(Attack))
                 Attack = AttackKind.None;
         }
@@ -416,11 +444,25 @@ public sealed class Runner
 
     private void AttachWeb(RooftopTrack track)
     {
-        float speedX = track.Speed;
+        // chained swings build on the speed he already has, up to a cap
+        float speedCap = track.CruiseSpeed * MaxSwingSpeedRatio;
+        float speedX = MathF.Min(track.Speed, speedCap);
 
         // stick the web up and ahead of him
         float ahead = MathF.Max(MinWebAhead, speedX * WebAheadSeconds);
         float above = ahead * WebAboveRatio;
+
+        // the swing dips (rope - above) below where it starts. If that would drag him into a roof
+        // he's swinging over, hang the web higher (a steeper rope dips less)
+        float dip = MathF.Sqrt(ahead * ahead + above * above) - above;
+        float allowed = HighestRoofBetween(track, track.RunnerTrackX, track.RunnerTrackX + 2 * ahead)
+                        - SwingRoofClearance - FeetY;
+        if (allowed < dip)
+        {
+            float d = MathF.Max(allowed, 6f);
+            above = MathF.Min(MathF.Max(above, (ahead * ahead - d * d) / (2 * d)), MaxWebAbove);
+        }
+
         Anchor = new WebAnchor(track.RunnerTrackX + ahead, HandY - above);
         RopeLength = MathF.Sqrt(ahead * ahead + above * above);
 
@@ -434,6 +476,7 @@ public sealed class Runner
         float cos = MathF.Cos(_theta);
         float speed = MathF.Sqrt(speedX * speedX + VelocityY * VelocityY);
         float tangentSpeed = MathF.Min(MathF.Max(speed, speedX / cos), MaxEntryBoost * speedX / cos);
+        tangentSpeed = MathF.Min(tangentSpeed, speedCap / cos);
         _omega = tangentSpeed / RopeLength;
 
         State = RunnerState.Swinging;
@@ -442,6 +485,21 @@ public sealed class Runner
         _canCoyote = false;
         _jumpHeld = false;
         _events.Raise(new WebAttached(_tick));
+    }
+
+    /// <summary>Longest a web can hang above his hands (when it's hung high to clear the roofs)</summary>
+    private const float MaxWebAbove = 1400f;
+
+    /// <summary>The highest roof top (smallest y) between two track x's, or the bottom of the screen if it's all gap</summary>
+    private static float HighestRoofBetween(RooftopTrack track, double from, double to)
+    {
+        float highest = RooftopTrack.Rows * RooftopTrack.TileSize;
+        for (double x = from; x <= to; x += RooftopTrack.TileSize / 2.0)
+        {
+            if (track.RoofAt(x) is float roof)
+                highest = MathF.Min(highest, roof);
+        }
+        return highest;
     }
 
     private void ReleaseWeb(RooftopTrack track)
@@ -479,9 +537,15 @@ public sealed class Runner
         if (roof is float surface && FeetY > surface)
         {
             float depth = FeetY - surface;
-            if (depth > StepTolerance)
+            if (depth > MantleReach)
             {
                 Die(track, RunEndReason.HitWall);
+                return;
+            }
+            if (depth > StepTolerance)
+            {
+                // caught the edge with his hands: pull up onto the roof
+                Land(track, surface);
                 return;
             }
             if (VelocityY >= 0)
@@ -506,6 +570,39 @@ public sealed class Runner
         track.ScrollDrivenByRunner = false;
         _webLocked = true;       // don't auto-swing if they land still holding the button
         _events.Raise(new RunnerLanded(_tick, fallSpeed));
+    }
+
+    /// <summary>
+    /// He touched a soldier: plays the attack that fits (attacks are automatic, see
+    /// <see cref="HazardField.ContactAttack"/>)
+    /// </summary>
+    internal void AutoAttack(AttackKind kind)
+    {
+        if (State == RunnerState.Dead || kind == AttackKind.None)
+            return;
+        Attack = kind;
+        AttackSeconds = 0;
+        _attackBuffer = 0;
+        _events.Raise(new RunnerAttacked(_tick, Attack));
+    }
+
+    /// <summary>
+    /// Puts him on top of something (a pylon he ran into near its top, or just after landing),
+    /// running on, instead of letting it kill him
+    /// </summary>
+    internal void VaultOnto(RooftopTrack track, float top)
+    {
+        if (State == RunnerState.Dead)
+            return;
+        if (State == RunnerState.Running)
+        {
+            FeetY = top;
+            VelocityY = 0;
+        }
+        else
+        {
+            Land(track, top);
+        }
     }
 
     /// <summary>

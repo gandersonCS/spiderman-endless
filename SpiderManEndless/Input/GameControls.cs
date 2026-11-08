@@ -67,7 +67,7 @@ public sealed class GameControls
             StandardControls.MoveUp, StandardControls.MoveDown,
             StandardControls.MoveLeft, StandardControls.MoveRight,
         }
-        .Concat(Enum.GetNames<GameAction>())
+        .Concat(Enum.GetNames<GameAction>().Where(name => name != nameof(GameAction.Attack)))     // no attack button
         .Append(StandardControls.Pause)
         .ToArray();
 

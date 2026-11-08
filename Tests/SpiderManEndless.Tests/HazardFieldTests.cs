@@ -92,15 +92,51 @@ public class HazardFieldTests
     }
 
     [Fact]
-    public void RunningIntoASoldier_WithoutAttacking_EndsTheRun()
+    public void RunningIntoASoldier_PunchesHimAutomatically()
     {
         var (session, runner) = Start(_ => default);
         Steps(runner, 3);
-        SoldierAhead(session, 60);
+        var enemy = SoldierAhead(session, 60);
 
         Steps(runner, 30);
-        Assert.Equal(RunnerState.Dead, session.World.Runner.State);
-        Assert.Equal(RunEndReason.Tackled, session.World.Runner.EndReason);
+        Assert.True(enemy.IsKnocked);
+        Assert.NotEqual(RunnerState.Dead, session.World.Runner.State);
+        Assert.Contains(session.Events.Pending, e => e is RunnerAttacked { Kind: AttackKind.Jab });
+    }
+
+    [Fact]
+    public void RunningIntoAShieldedSoldier_EndsTheRun()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        double x = world.Track.RunnerTrackX + 60;
+        var enemy = new Enemy(world.Hazards.NextId(), EnemyKind.Rooftop, false, x, world.Track.RoofAt(x).Value, 0)
+        {
+            IsShielded = true,
+        };
+        world.Hazards.Add(enemy);
+
+        Steps(runner, 30);
+        Assert.Equal(RunEndReason.Tackled, world.Runner.EndReason);
+        Assert.False(enemy.IsKnocked);
+    }
+
+    [Fact]
+    public void JumpingOverAShieldedSoldier_IsSafe()
+    {
+        var (session, runner) = Start(tick => tick >= 3 ? Holding(GameAction.Jump) : default);
+        Steps(runner, 3);
+        var world = session.World;
+        double x = world.Track.RunnerTrackX + 150;
+        world.Hazards.Add(new Enemy(world.Hazards.NextId(), EnemyKind.Rooftop, false, x, world.Track.RoofAt(x).Value, 0)
+        {
+            IsShielded = true,
+        });
+
+        Steps(runner, 50);
+        Assert.NotEqual(RunnerState.Dead, world.Runner.State);
+        Assert.True(world.Track.RunnerTrackX > x + 40);
     }
 
     [Fact]
@@ -217,6 +253,7 @@ public class HazardFieldTests
         float y = world.Track.RoofAt(x).Value - 130;
         var flyer = new Enemy(world.Hazards.NextId(), EnemyKind.Flyer, isShooter: true, x, y, speed: 60);
         world.Hazards.Add(flyer);
+        world.Hazards.HoldFireBeforeEdges = false;     // he's not jumping, so there's always an edge coming
 
         for (int i = 0; i < 60 && !flyer.IsAiming; i++)
             runner.Step();
@@ -436,10 +473,10 @@ public class HazardFieldTests
     }
 
     [Fact]
-    public void ADroppedPylon_LandsWhereYoudBe_IfYouJustKeepRunning()
+    public void APylonDroppedRightOnYou_Crushes()
     {
-        // it doesn't follow him: it just drops where he'll be at his current speed. jumping
-        // doesn't change where he is, so it only gets avoided with a swing
+        // the director never drops one right on him (see the next test), but if one does land on
+        // him, that's still a crush
         var (session, runner) = Start(_ => default);
         Steps(runner, 3);
         var world = session.World;
@@ -450,5 +487,265 @@ public class HazardFieldTests
 
         Steps(runner, (int)(seconds * 60) + 10);
         Assert.Equal(RunEndReason.Crushed, world.Runner.EndReason);
+    }
+
+    [Fact]
+    public void ADroppedPylon_LandsJustInFrontOfYou_NotOnYou()
+    {
+        // where the director drops one: just ahead of where he'd be when it lands. Keep running
+        // without jumping and he runs into its side (not crushed)
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        float seconds = 0.8f;     // short enough that it lands on the first roof
+        double x = world.Track.RunnerTrackX + world.Track.Speed * (seconds + HazardField.PylonLandsAheadSeconds);
+        float roof = world.Track.RoofAt(x).Value;
+        var pylon = new Pylon(x, HazardField.DropStartY, roof, seconds);
+        world.Hazards.Add(pylon);
+
+        Steps(runner, (int)(seconds * 60) + 2);
+        Assert.False(pylon.IsFalling);
+        Assert.NotEqual(RunnerState.Dead, world.Runner.State);
+
+        Steps(runner, 40);
+        Assert.Equal(RunEndReason.HitPylon, world.Runner.EndReason);
+    }
+
+    [Fact]
+    public void AFallingPylon_IsOnScreenForTheWholeDrop()
+    {
+        var pylon = new Pylon(500, HazardField.DropStartY, 288, 1f);
+        Assert.True(pylon.Top < 0 && pylon.Y > 0, "Its bottom should show at the top of the screen from the start");
+    }
+
+    [Fact]
+    public void RunningIntoAPylonNearItsTop_PopsYouOntoIt()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        double x = world.Track.RunnerTrackX + 120;
+        float roof = world.Track.RoofAt(x).Value;
+
+        // a pylon sunk into the roof so its top is just above his feet
+        float bottom = roof + Pylon.Height - 20;
+        var pylon = new Pylon(x, bottom, bottom, fallSeconds: 0);
+        world.Hazards.Add(pylon);
+
+        Steps(runner, 40);
+        Assert.NotEqual(RunnerState.Dead, world.Runner.State);
+    }
+
+    [Fact]
+    public void ABulletThatOnlyGrazesYou_IsACloseCallNotADeath()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+
+        // through the top couple of pixels of his full body: inside how he looks, outside the lethal box
+        float graze = world.Runner.FeetY - HazardField.RunnerHeight + 2;
+        world.Hazards.Add(new Bullet(world.Track.RunnerTrackX + 120, graze, -400, 0));
+
+        Steps(runner, 60);
+        Assert.NotEqual(RunnerState.Dead, world.Runner.State);
+    }
+
+    [Fact]
+    public void WhenAHazardEndsTheRun_ItRemembersWhere()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        double x = world.Track.RunnerTrackX + 120;
+        world.Hazards.Add(new Bullet(x, world.Runner.FeetY - 30, -400, 0));
+
+        Steps(runner, 30);
+        Assert.Equal(RunEndReason.Shot, world.Runner.EndReason);
+        Assert.NotNull(world.Hazards.KilledBy);
+    }
+
+    [Fact]
+    public void JumpingIntoASoldier_BeatsHim()
+    {
+        // in the air, touching a soldier counts as a kick
+        var (session, runner) = Start(tick => tick >= 3 && tick < 30 ? Holding(GameAction.Jump) : default);
+        Steps(runner, 3);
+        var enemy = SoldierAhead(session, 45);
+
+        Steps(runner, 12);
+        Assert.True(enemy.IsKnocked);
+        Assert.NotEqual(RunnerState.Dead, session.World.Runner.State);
+        Assert.Contains(session.Events.Pending, e => e is RunnerAttacked { Kind: not AttackKind.Jab });
+    }
+
+    [Fact]
+    public void ChainedSwings_DontSpeedUpForever()
+    {
+        // hold jump the whole time (jump, then swing again and again), re-pressing so each swing chains
+        var (session, runner) = Start(tick => tick % 40 < 36 ? Holding(GameAction.Jump) : default);
+        float fastest = 0;
+        for (int i = 0; i < 60 * 8 && session.World.Runner.State != RunnerState.Dead; i++)
+        {
+            runner.Step();
+            fastest = MathF.Max(fastest, session.World.Track.Speed);
+        }
+
+        // the bottom of a swing can go a bit over the cap, but not run away
+        Assert.True(fastest < session.World.Track.CruiseSpeed * Runner.MaxSwingSpeedRatio * 1.5f,
+            $"fastest {fastest}");
+    }
+
+    [Fact]
+    public void APumpkinBomb_LinesUpWithYourChest_AndOnlyWarnsAtLaunch()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        world.Hazards.StartMeters = double.MaxValue;
+        Assert.True(world.Hazards.TrySpawnPumpkin(world.Track, world.Runner, 0.5f, session.Events, 3));
+
+        var bomb = world.Hazards.Pumpkins[^1];
+        Assert.Equal(world.Runner.FeetY - HazardField.RunnerHeight / 2, bomb.BaseY, 1);
+        Assert.False(bomb.IsLaunched);
+
+        // no warning while it hangs...
+        runner.Step();
+        Assert.DoesNotContain(session.Events.Pending, e => e is SpiderSenseTriggered { Kind: ThreatKind.PumpkinBomb });
+
+        // ...then it launches, and he's still on its line
+        for (int i = 0; i < 90 && !bomb.IsLaunched; i++)
+            runner.Step();
+        Assert.True(bomb.IsLaunched);
+        Assert.Contains(session.Events.Pending, e => e is SpiderSenseTriggered { Kind: ThreatKind.PumpkinBomb });
+    }
+
+    [Fact]
+    public void ShootersDontFirePointBlank()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        world.Hazards.StartMeters = double.MaxValue;
+        world.Hazards.HoldFireBeforeEdges = false;
+
+        // a flying shooter close in front of him
+        double x = world.Track.RunnerTrackX + 160;
+        float y = world.Runner.FeetY - 60;
+        world.Hazards.Add(new Enemy(world.Hazards.NextId(), EnemyKind.Flyer, isShooter: true, x, y, speed: 60));
+
+        Steps(runner, 60);
+        Assert.DoesNotContain(session.Events.Pending, e => e is BulletFired);
+    }
+
+    [Fact]
+    public void OnlyOneShooterAimsAtATime()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        world.Hazards.StartMeters = double.MaxValue;     // just these two
+
+        // two flying shooters on screen together
+        for (int i = 0; i < 2; i++)
+        {
+            double x = world.Track.ScrollX + 640 + i * 60;
+            float y = world.Track.RoofAt(world.Track.RunnerTrackX).Value - 140 - i * 40;
+            world.Hazards.Add(new Enemy(world.Hazards.NextId(), EnemyKind.Flyer, isShooter: true, x, y, speed: 60));
+        }
+
+        for (int i = 0; i < 120; i++)
+        {
+            runner.Step();
+            Assert.True(world.Hazards.Enemies.Count(e => e.IsAiming) <= 1);
+        }
+    }
+
+    [Fact]
+    public void APumpkinBomb_HangsAtTheEdgeFirst_ThenLaunches()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        float y = world.Runner.FeetY - 200;
+        var bomb = PumpkinBomb.Hovering(world.Track.ScrollX + World.Width - 30, y, 800, 0.5f);
+        world.Hazards.Add(bomb);
+
+        Steps(runner, 20);
+        Assert.False(bomb.IsLaunched);
+        Assert.Equal(World.Width - 30, (float)(bomb.X - world.Track.ScrollX), 1);     // stays put on screen
+
+        Steps(runner, 15);
+        Assert.True(bomb.IsLaunched);
+        Assert.Contains(session.Events.Pending, e => e is PumpkinLaunched);
+    }
+
+    [Fact]
+    public void ABombWhoseLineMissesYou_DoesntSetOffTheSpiderSense()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        world.Hazards.StartMeters = double.MaxValue;
+        float wayAbove = world.Runner.FeetY - HazardField.RunnerHeight / 2 - HazardField.PumpkinLaneWarnDistance - 60;
+        world.Hazards.Add(new PumpkinBomb(world.Track.RunnerTrackX + 400, wayAbove, vx: -500));
+
+        Steps(runner, 5);
+        Assert.False(world.Hazards.SpiderSenseActive);
+    }
+
+    [Fact]
+    public void SwingingALot_SwitchesTheTaskForceToAirUnits()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        world.Hazards.StartMeters = 0;
+        world.Hazards.SetAirShare(1f);
+
+        runner.Step();
+        Assert.Equal(TaskForceFocus.Air, world.Hazards.Focus);
+        Assert.Contains(session.Events.Pending, e => e is TaskForceAdapted { Focus: TaskForceFocus.Air });
+    }
+
+    [Fact]
+    public void EvenInTheAir_RooftopSoldiersStillShowUp()
+    {
+        var hazards = new HazardField(new DeterministicRandom(9));
+        hazards.SetAirShare(1f);
+        int rooftop = 0;
+        for (int i = 0; i < 2000; i++)
+        {
+            if (hazards.PickSpawn(0.5f) == HazardField.SpawnKind.RooftopSoldier)
+                rooftop++;
+        }
+        Assert.True(rooftop > 2000 * 0.15, $"{rooftop} of 2000");
+    }
+
+    [Fact]
+    public void TheContactAttack_DependsOnWhereTheSoldierIs()
+    {
+        Assert.Equal(AttackKind.Jab, HazardField.ContactAttack(onGround: true, 200, 150));
+        Assert.Equal(AttackKind.AirKick, HazardField.ContactAttack(onGround: false, 200, 260));     // below
+        Assert.Equal(AttackKind.UpwardKick, HazardField.ContactAttack(onGround: false, 200, 205));  // level
+        Assert.Equal(AttackKind.Uppercut, HazardField.ContactAttack(onGround: false, 200, 140));    // above
+    }
+
+    [Fact]
+    public void AShieldedSoldierAhead_SetsOffTheSpiderSense()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        world.Hazards.StartMeters = double.MaxValue;
+        double x = world.Track.RunnerTrackX + 400;
+        world.Hazards.Add(new Enemy(world.Hazards.NextId(), EnemyKind.Rooftop, false, x, world.Track.RoofAt(x).Value, 0)
+        {
+            IsShielded = true,
+        });
+
+        Steps(runner, 2);
+        Assert.True(world.Hazards.SpiderSenseActive);
+        Assert.Single(session.Events.Pending.OfType<SpiderSenseTriggered>(), e => e.Kind == ThreatKind.ShieldedSoldier);
     }
 }

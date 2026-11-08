@@ -43,6 +43,12 @@ public partial class WorldView
 
     private const float HomingRadius = 3.5f;
 
+    // the "task force adapting" callout
+    private string _adaptText;
+    private float _adaptStart = -10;
+    private const float AdaptSeconds = 2.2f;
+    private static readonly Color AdaptColor = new(255, 90, 70);
+
     /// <summary>Reacts to the hazard events with effects and popups</summary>
     private void OnHazardEvent(GameEvent gameEvent)
     {
@@ -68,6 +74,12 @@ public partial class WorldView
             case RunEnded:
                 PickDeathLine();
                 break;
+            case TaskForceAdapted adapted:
+                _adaptText = adapted.Focus == TaskForceFocus.Air
+                    ? "TASK FORCE: AIR UNITS INBOUND"
+                    : "TASK FORCE: GROUND UNITS INBOUND";
+                _adaptStart = _clock;
+                break;
             case NearMiss miss:
                 _popups.Add(new Popup($"CLOSE CALL! +{miss.Essence}", miss.X, miss.Y - 20, _clock, CloseCallColor));
                 break;
@@ -91,8 +103,19 @@ public partial class WorldView
 
         foreach (var pylon in hazards.Pylons)
         {
-            if (pylon.IsFalling)
-                DrawShadow(pylon.X - track.ScrollX, pylon.RoofY, pylon.FallProgress, 18, 58);
+            if (!pylon.IsFalling)
+                continue;
+
+            // a red warning column from the top of the screen down to where it'll land, so it's
+            // obvious where it's coming down from the moment it starts
+            float x = (float)(pylon.X - track.ScrollX);
+            float pulse = 0.5f + 0.5f * MathF.Sin(_clock * 14);
+            float alpha = (0.12f + 0.1f * pulse) * (1 - 0.5f * pylon.FallProgress);
+            Fill(new RectangleF(x - Pylon.HalfWidth, 0, Pylon.HalfWidth * 2, pylon.RoofY), AimColor * alpha);
+            Fill(new RectangleF(x - Pylon.HalfWidth, 0, 2, pylon.RoofY), AimColor * (alpha * 2));
+            Fill(new RectangleF(x + Pylon.HalfWidth - 2, 0, 2, pylon.RoofY), AimColor * (alpha * 2));
+
+            DrawShadow(pylon.X - track.ScrollX, pylon.RoofY, pylon.FallProgress, 30, 60);
         }
     }
 
@@ -100,7 +123,7 @@ public partial class WorldView
     {
         float width = MathHelper.Lerp(smallWidth, bigWidth, progress);
         float height = width * 0.3f;
-        float alpha = MathHelper.Lerp(0.18f, 0.6f, progress);
+        float alpha = MathHelper.Lerp(0.4f, 0.75f, progress);
         var texture = _essenceArt.Disc;
         var origin = new Vector2(texture.Width / 2f, texture.Height / 2f);
         var scale = new Vector2(width / texture.Width, height / texture.Height);
@@ -183,6 +206,30 @@ public partial class WorldView
         var feet = new Vector2(MathF.Round(x), MathF.Round(enemy.Y));
         SpriteBatch.Draw(texture, feet, HazardSprites.SoldierFrame(frame), Color.White, 0, HazardSprites.SoldierFeet,
             HazardSprites.SoldierScale, SpriteEffects.None, 0);
+
+        if (enemy.IsShielded)
+            DrawShield(feet);
+    }
+
+    private static readonly Color ShieldColor = new(95, 40, 48);
+    private static readonly Color ShieldEdge = new(255, 70, 60);
+
+    /// <summary>
+    /// A riot shield held out in front of him (drawn in code): a tall glassy panel with a bright
+    /// edge and a "can't touch this" stripe, so you can spot shielded soldiers from across the screen
+    /// </summary>
+    private void DrawShield(Vector2 feet)
+    {
+        var panel = new RectangleF(feet.X - 30, feet.Y - Enemy.BodyHeight + 2, 14, Enemy.BodyHeight - 4);
+        float pulse = 0.5f + 0.5f * MathF.Sin(_clock * 5);
+        Fill(new RectangleF(panel.X - 2, panel.Y - 2, panel.Width + 4, panel.Height + 4), Color.Black * 0.6f);
+        Fill(panel, ShieldColor * 0.9f);
+        Fill(new RectangleF(panel.X, panel.Y, 2, panel.Height), ShieldEdge * (0.6f + 0.4f * pulse));
+        Fill(new RectangleF(panel.X + panel.Width - 2, panel.Y, 2, panel.Height), ShieldEdge * 0.5f);
+        Fill(new RectangleF(panel.X, panel.Y, panel.Width, 2), ShieldEdge);
+        Fill(new RectangleF(panel.X + 3, panel.Y + 8, panel.Width - 6, 4), Color.White * 0.35f);       // glare
+        Fill(new RectangleF(panel.X, panel.Y + panel.Height * 0.55f, panel.Width, 5), new Color(255, 200, 40));  // stripe
+        Fill(new RectangleF(panel.X, panel.Y + panel.Height * 0.55f + 5, panel.Width, 3), Color.Black * 0.7f);
     }
 
     /// <summary>
@@ -217,6 +264,16 @@ public partial class WorldView
                 Glow(new Vector2(x + 5, enemy.Y + 12), 7 * flicker, Color.White * 0.6f);
             }
 
+            if (enemy.IsShielded)
+            {
+                // a pulsing red glow around the shield: don't touch
+                float pulse = 0.5f + 0.5f * MathF.Sin(_clock * 6 + enemy.Id);
+                var shield = new Vector2(x - 23, enemy.Y - Enemy.BodyHeight / 2);
+                Glow(shield, 34 + 6 * pulse, AimColor * (0.45f + 0.3f * pulse));
+                Glow(shield + new Vector2(0, -18), 18, AimColor * 0.35f);
+                Glow(shield + new Vector2(0, 18), 18, AimColor * 0.35f);
+            }
+
             if (enemy.IsShooter)
             {
                 // red visor glow: this one shoots
@@ -240,6 +297,27 @@ public partial class WorldView
 
         foreach (var bomb in hazards.Pumpkins)
         {
+            // once launched, its line stays drawn ahead of it until it's gone by, so you never
+            // lose track of where it's going
+            if (bomb.IsLaunched)
+            {
+                float lx0 = (float)(bomb.X - track.ScrollX) - 20;
+                for (float lx = lx0; lx > -20; lx -= 26)
+                    DrawLine(new Vector2(lx, bomb.BaseY), new Vector2(lx - 14, bomb.BaseY), BlastColor * 0.45f, 2.5f);
+            }
+
+            // while it hangs at the edge: its flight line across the screen, pulsing faster as
+            // the launch gets close
+            if (!bomb.IsLaunched)
+            {
+                float progress = MathHelper.Clamp(bomb.Age / bomb.WarnSeconds, 0, 1);
+                float blink = 0.5f + 0.5f * MathF.Sin(_clock * (10 + 30 * progress));
+                float bx = (float)(bomb.X - track.ScrollX);
+                for (float lx = bx - 20; lx > -20; lx -= 26)
+                    DrawLine(new Vector2(lx, bomb.BaseY), new Vector2(lx - 14, bomb.BaseY), BlastColor * (0.25f + 0.45f * blink), 2.5f);
+                Glow(new Vector2(bx, bomb.Y), 22 + 10 * progress, BlastColor * (0.35f + 0.4f * blink));
+            }
+
             // lit fuse
             float x = (float)(bomb.X - track.ScrollX);
             float rotation = -bomb.Age * 9;
@@ -270,9 +348,11 @@ public partial class WorldView
             var velocity = new Vector2(spark.VelocityX, spark.VelocityY);
             for (int i = 0; i < 3; i++)
             {
-                var trail = at - velocity * (0.012f * i);
-                float radius = HomingRadius * (2.6f - 0.5f * i);
-                SpriteBatch.Draw(glow, trail, null, color * (0.8f - 0.22f * i), 0, glowOrigin,
+                // kept small and faint: a big combo bursts into a lot of these at once, and a
+                // bright streak next to him reads like something dangerous
+                var trail = at - velocity * (0.008f * i);
+                float radius = HomingRadius * (1.8f - 0.4f * i);
+                SpriteBatch.Draw(glow, trail, null, color * (0.5f - 0.15f * i), 0, glowOrigin,
                     radius / (glow.Width / 2f), SpriteEffects.None, 0);
             }
         }
@@ -306,10 +386,18 @@ public partial class WorldView
             var at = new Vector2(MathF.Round((float)(bullet.X - track.ScrollX)), MathF.Round(bullet.Y));
             float pulse = 0.5f + 0.5f * MathF.Sin(_clock * 28 + bullet.Age * 10);
 
-            // red outline (1 art pixel = 2 units thick, growing a little with the pulse), then the yellow pixel
-            float outline = pulse > 0.5f ? 10 : 8;
-            Fill(new RectangleF(at.X - outline / 2, at.Y - outline / 2, outline, outline), BulletOutline * (0.6f + 0.4f * pulse));
-            Fill(new RectangleF(at.X - 2, at.Y - 2, 4, 4), BulletCore);
+            // a streak behind it so you can see which way it's going (and spot it among the essence)
+            var direction = new Vector2(bullet.VelocityX, bullet.VelocityY);
+            if (direction.LengthSquared() > 1)
+                direction.Normalize();
+            DrawLine(at - direction * 34, at, Color.Black * 0.45f, 6f);
+            DrawLine(at - direction * 30, at, BulletCore * 0.85f, 2.5f);
+
+            // dark backing, red outline (pulsing), then the yellow pixel
+            Fill(new RectangleF(at.X - 9, at.Y - 9, 18, 18), Color.Black * 0.55f);
+            float outline = pulse > 0.5f ? 14 : 12;
+            Fill(new RectangleF(at.X - outline / 2, at.Y - outline / 2, outline, outline), BulletOutline * (0.7f + 0.3f * pulse));
+            Fill(new RectangleF(at.X - 3, at.Y - 3, 6, 6), BulletCore);
         }
     }
 
@@ -428,6 +516,41 @@ public partial class WorldView
         Fill(new RectangleF(bar.X + 1, bar.Y + 1, (bar.Width - 2) * left, bar.Height - 2), ComboColor);
     }
 
+    /// <summary>
+    /// "TASK FORCE: AIR UNITS INBOUND" across the top when the task force adapts to how he plays
+    /// (text batch)
+    /// </summary>
+    private void DrawAdaptCallout()
+    {
+        float t = _clock - _adaptStart;
+        if (_adaptText == null || t > AdaptSeconds)
+            return;
+
+        float alpha = t < 0.15f ? t / 0.15f : t > AdaptSeconds - 0.4f ? (AdaptSeconds - t) / 0.4f : 1f;
+        bool flash = t < 0.6f && (int)(t * 12) % 2 == 0;
+        var at = new Vector2(World.Width / 2, 112);
+        Fill(new RectangleF(0, at.Y - 16, World.Width, 32), Color.Black * (0.45f * alpha));
+        DrawCentered(_adaptText, at, (flash ? Color.White : AdaptColor) * alpha, 0.5f);
+    }
+
+    /// <summary>
+    /// When he's above the top of the screen, an arrow at the top edge shows where he is (red
+    /// while his spider sense is going)
+    /// </summary>
+    private void DrawOffscreenMarker(HazardField hazards, Runner runner)
+    {
+        if (runner.State == RunnerState.Dead || runner.FeetY - 60 > 0)
+            return;
+
+        var color = hazards.SpiderSenseActive ? AimColor : Color.White;
+        float x = RooftopTrack.RunnerX;
+        var tip = new Vector2(x, 4);
+        DrawLine(new Vector2(x - 10, 20), tip, Color.Black * 0.6f, 5f);
+        DrawLine(new Vector2(x + 10, 20), tip, Color.Black * 0.6f, 5f);
+        DrawLine(new Vector2(x - 10, 20), tip, color, 3f);
+        DrawLine(new Vector2(x + 10, 20), tip, color, 3f);
+    }
+
     /// <summary>Floating text popups (text batch)</summary>
     private void DrawPopups(RooftopTrack track)
     {
@@ -505,6 +628,41 @@ public partial class WorldView
     {
         new(-3, 0), new(3, 0), new(0, -3), new(0, 3),
     };
+
+    // ---- what got him ----
+
+    /// <summary>
+    /// After he dies, a pulsing red ring around whatever did it, so you can see why before the
+    /// end screen comes up (and it stays, faintly, behind the end screen)
+    /// </summary>
+    private void DrawWhatGotHim(Camera2D camera, HazardField hazards, RooftopTrack track, Runner runner)
+    {
+        if (runner.State != RunnerState.Dead || hazards.KilledBy is not { } killer || _essenceArt == null)
+            return;
+
+        float t = runner.DeadSeconds;
+        float strength = t < EndScreenDelay ? 1f : 0.45f;
+        float pulse = 0.5f + 0.5f * MathF.Sin(t * 16);
+        var at = new Vector2((float)(killer.X - track.ScrollX), killer.Y);
+
+        Rebegin(camera, BlendState.Additive, SamplerState.LinearClamp);
+        var glow = _essenceArt.Glow;
+        SpriteBatch.Draw(glow, at, null, AimColor * (0.6f * strength), 0, new Vector2(glow.Width / 2f, glow.Height / 2f),
+            (34 + 8 * pulse) / (glow.Width / 2f), SpriteEffects.None, 0);
+        Rebegin(camera, BlendState.AlphaBlend, SamplerState.PointClamp);
+
+        // the ring shrinks in onto it, then pulses
+        float radius = MathHelper.Lerp(80, 30, MathF.Min(1, t / 0.25f)) + 4 * pulse;
+        const int segments = 20;
+        for (int i = 0; i < segments; i++)
+        {
+            float a0 = i * MathHelper.TwoPi / segments, a1 = (i + 1) * MathHelper.TwoPi / segments;
+            var p0 = at + new Vector2(MathF.Cos(a0), MathF.Sin(a0)) * radius;
+            var p1 = at + new Vector2(MathF.Cos(a1), MathF.Sin(a1)) * radius;
+            DrawLine(p0, p1, Color.Black * (0.5f * strength), 5f);
+            DrawLine(p0, p1, AimColor * strength, 3f);
+        }
+    }
 
     // ---- death lines ----
 
