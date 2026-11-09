@@ -128,17 +128,19 @@ public partial class WorldView
                     onScreen: true);
                 break;
 
+            case NewsBoard.Soldiers:
+                PostBoard("BREAKING", "TASK FORCE ENGAGES!",
+                    "ONE TOUCH TAKES AN OFFICER DOWN.\nBUT THEIR ROUNDS ARE LETHAL - DODGE THEM!",
+                    preview: BoardPreview.Takedown);
+                break;
+                
             case NewsBoard.SpiderSense:
                 PostBoard("EXCLUSIVE", "TRUST THE TINGLE!",
                     "HIS SPIDER-SENSE WARNS HIM BEFORE EVERY ATTACK.\nWHEN IT FLASHES, MOVE!",
                     preview: BoardPreview.SpiderSense);
                 break;
 
-            case NewsBoard.Soldiers:
-                PostBoard("BREAKING", "TASK FORCE ENGAGES!",
-                    "ONE TOUCH TAKES AN OFFICER DOWN.\nBUT THEIR ROUNDS ARE LETHAL - DODGE THEM!",
-                    preview: BoardPreview.Takedown);
-                break;
+
         }
     }
 
