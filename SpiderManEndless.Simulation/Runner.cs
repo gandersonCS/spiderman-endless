@@ -126,6 +126,16 @@ public sealed class Runner
 
     /// <summary>Fraction of upward speed kept on release, otherwise he rockets off the top of the screen</summary>
     public const float ReleaseUpFraction = 0.4f;
+
+    /// <summary>
+    /// Sky limit: letting go of a web can't fling his feet higher than this (y goes down, so
+    /// smaller = higher). Without it each chained swing gained a little height (you attach at the
+    /// top of the last arc), so you could climb off the top of the screen and stay up there, out
+    /// of reach of everything. About the peak of a full jump from the tallest roof, so normal
+    /// play doesn't feel it
+    /// </summary>
+    public const float SkyLimitFeetY = 60f;
+
     /// <summary>How long after dying before a button press counts as "continue"</summary>
     public const float ContinueDelaySeconds = 0.8f;
 
@@ -510,7 +520,13 @@ public sealed class Runner
         _canCoyote = false;
         _webLocked = true;       // have to release and press again to swing again
         if (VelocityY < 0)
+        {
             VelocityY *= ReleaseUpFraction;
+
+            // cap the upward speed so the top of the arc is at the sky limit (v = sqrt(2 g h))
+            float room = MathF.Max(0f, FeetY - SkyLimitFeetY);
+            VelocityY = MathF.Max(VelocityY, -MathF.Sqrt(2f * Gravity * room));
+        }
         _events.Raise(new WebReleased(_tick));
     }
 

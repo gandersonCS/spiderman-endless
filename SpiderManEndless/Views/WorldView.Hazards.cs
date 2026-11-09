@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using CIS580.UI;
 using CIS580.Views;
 using SpiderManEndless.Simulation;
+using SpiderManEndless.Feedback;
 
 namespace SpiderManEndless.Views;
 
@@ -540,6 +541,7 @@ public partial class WorldView
 
         SpriteBatch.Draw(_hazardSprites.SpiderSense, center, HazardSprites.SenseFrame(frame), Color.White, 0,
             HazardSprites.SenseCenter, scale, SpriteEffects.None, 0);
+         
 
         // arrow toward the threat
         var direction = new Vector2(hazards.SpiderSenseDirX, hazards.SpiderSenseDirY);
@@ -738,9 +740,10 @@ public partial class WorldView
         "Now your costume's ruined",
         "Tell MJ you'll be late",
         "Tell Uncle Ben I said hi",
-        "Not so amazing now, huh?",
+        "Not so amazing now...",
         "Your spider sense tried to warn you",
         "With great power... comes a great fall",
+        "Does anything a spider can't"
     };
 
     private readonly Random _deathLineRandom = new();

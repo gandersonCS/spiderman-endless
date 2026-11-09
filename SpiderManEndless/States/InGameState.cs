@@ -327,6 +327,14 @@ public sealed class InGameState : AppState, ILoadable
     {
         bool dead = Session.World.Runner.State == RunnerState.Dead;
 
+        // Pause if the window loses focus (alt-tab, clicking another window), so the run doesn't
+        // keep going and kill him while nobody's looking
+        if (!dead && !Game.IsActive)
+        {
+            Pause(_players[0]);
+            return;
+        }
+
         // Clicking the HUD's pause button pauses for the first player
         if (!dead && ClickedOn(_hud.PauseButton))
         {

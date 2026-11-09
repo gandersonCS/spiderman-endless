@@ -36,6 +36,12 @@ public sealed class GameFeedback
     private readonly Rumble _rumble;
     private readonly HitStop _hitStop;
 
+    /// <summary>Tick of the last spider-sense jolt, so a burst of threats only jolts once</summary>
+    private long _lastSenseTick = long.MinValue / 2;
+
+    /// <summary>Minimum ticks between spider-sense jolts (60 ticks = 1 second)</summary>
+    private const long SenseCooldownTicks = 90;
+
     /// <param name="players">The players on this machine</param>
     /// <param name="world">The view of the world (for screen shake)</param>
     /// <param name="rumble">Vibrates the players' gamepads</param>
@@ -85,6 +91,19 @@ public sealed class GameFeedback
                 _world.Shake(0.2f);
                 foreach (var local in _players)
                     _rumble.Play(local, 0.4f, 0.1f, TimeSpan.FromMilliseconds(120));
+                break;
+            case SpiderSenseTriggered sense:
+                // several threats can start close together late in a run; only jolt once per burst
+                if (sense.Tick - _lastSenseTick < SenseCooldownTicks)
+                    break;
+                _lastSenseTick = sense.Tick;
+
+                // a split-second "time stops" beat: the danger registers before he reacts
+                _hitStop.Start(TimeSpan.FromMilliseconds(sense.Kind == ThreatKind.PumpkinBomb ? 60 : 45));
+
+                // a buzzy tingle, not a thud: mostly the high-frequency motor, short and light
+                foreach (var local in _players)
+                    _rumble.Play(local, 0.15f, 0.55f, TimeSpan.FromMilliseconds(110));
                 break;
             case NearMiss:
                 foreach (var local in _players)

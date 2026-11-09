@@ -56,6 +56,8 @@ public class MainMenuLayer : MenuLayer
     private static readonly Color LogoOutline = new(10, 12, 20);
 
     private const string PressText = "PRESS ANY BUTTON TO START";
+    // plain ASCII only: menufont has no (c) or middle-dot glyphs and no default character, so either would crash
+    private const string DisclaimerText = "Fan project  -  Spider-Man (c) Marvel  -  Not affiliated with or endorsed by Marvel";
 
     /// <summary>How long the leap from the title screen into the menu takes, in seconds</summary>
     private const float IntroSeconds = 0.95f;
@@ -656,6 +658,15 @@ public class MainMenuLayer : MenuLayer
             TextLayout.CenteredTop(font, PressText, title.PressY - rise, textScale));
         float pressAlpha = alpha * alpha * pulse;
         DrawOutlinedText(font, PressText, textPosition, textScale, Color.White * pressAlpha, LogoOutline * pressAlpha, 2);
+
+        // small fan-project disclaimer along the bottom edge (steady, not pulsing)
+        var smallFont = Theme.TextFont;
+        float smallScale = TextLayout.FitScale(smallFont, DisclaimerText, width * 0.9f, 0.6f);
+        var smallSize = smallFont.MeasureString(DisclaimerText) * smallScale;
+        var smallPosition = new Vector2(MathF.Round((width - smallSize.X) / 2),
+            TextLayout.CenteredTop(smallFont, DisclaimerText, height * 0.96f - rise, smallScale));
+        DrawOutlinedText(smallFont, DisclaimerText, smallPosition, smallScale,
+            HintColor * (alpha * alpha), LogoOutline * (alpha * alpha), 1);
     }
 
     /// <summary>
@@ -681,21 +692,21 @@ public class MainMenuLayer : MenuLayer
     /// </summary>
     private void DrawTextLogo(RectangleF box, float alpha)
     {
-        const string top = "SPIDER-MAN", bottom = "ENDLESS";
+        const string top = "ENDLESS", bottom = "WEB";
 
         // each line as big as fits: "SPIDER-MAN" gets the full width and ~60% of the height,
         // "ENDLESS" 60% of the width and ~30% of the height
-        var titleFont = Theme.TitleFont;
-        var (topInkTop, topInkBottom) = TextLayout.InkExtent(titleFont, top);
-        float topScale = MathF.Min(TextLayout.FitScale(titleFont, top, box.Width, 4f),
-            box.Height * 0.6f / (topInkBottom - topInkTop));
-        float topWidth = titleFont.MeasureString(top).X * topScale;
+        var topFont = _buttonFont;
+        var (topInkTop, topInkBottom) = TextLayout.InkExtent(topFont, top);
+        float topScale = MathF.Min(TextLayout.FitScale(topFont, bottom, box.Width, 4f),
+            box.Height * 0.3f / (topInkBottom - topInkTop));
+        float topWidth = topFont.MeasureString(top).X * topScale;
 
-        var font = _buttonFont;
-        var (bottomInkTop, bottomInkBottom) = TextLayout.InkExtent(font, bottom);
-        float bottomScale = MathF.Min(TextLayout.FitScale(font, bottom, box.Width * 0.6f, 4f),
-            box.Height * 0.3f / (bottomInkBottom - bottomInkTop));
-        float bottomWidth = font.MeasureString(bottom).X * bottomScale;
+        var bottomFont = Theme.TitleFont;
+        var (bottomInkTop, bottomInkBottom) = TextLayout.InkExtent(bottomFont, bottom);
+        float bottomScale = MathF.Min(TextLayout.FitScale(bottomFont, top, box.Width, 4f),
+            box.Height * 0.6f / (bottomInkBottom - bottomInkTop));
+        float bottomWidth = bottomFont.MeasureString(bottom).X * bottomScale;
 
         // stack the two lines (by their visible pixels) and sit them on the bottom of the box
         float gap = box.Height * 0.04f;
@@ -707,8 +718,8 @@ public class MainMenuLayer : MenuLayer
         var bottomPosition = new Vector2(MathF.Round(box.X + (box.Width - bottomWidth) / 2),
             MathF.Round(inkTop + topInk + gap - bottomInkTop * bottomScale));
 
-        DrawOutlinedText(titleFont, top, topPosition, topScale, LogoRed * alpha, LogoOutline * alpha, 3);
-        DrawOutlinedText(font, bottom, bottomPosition, bottomScale, Color.White * alpha, LogoOutline * alpha, 3);
+        DrawOutlinedText(topFont, top, topPosition, topScale, LogoRed * alpha, LogoOutline * alpha, 3);
+        DrawOutlinedText(bottomFont, bottom, bottomPosition, bottomScale, Color.White * alpha, LogoOutline * alpha, 3);
     }
 
     private void DrawOutlinedText(SpriteFont font, string text, Vector2 position, float scale, Color color,
