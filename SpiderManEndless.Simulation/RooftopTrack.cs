@@ -89,8 +89,9 @@ public sealed class RooftopTrack
     //   big gap    - too far to jump at starting speed, you need to jump and then swing
     //
     // the chances shift toward big gaps as the run goes on (difficulty 0 -> 1, see HazardField.DifficultyAt)
-    public const float NoGapChance = 0.35f;
-    public const float SmallGapChance = 0.35f;     // whatever's left over = big gap
+    // at the start only about 1 gap in 7 needs a swing, so there's room to learn it
+    public const float NoGapChance = 0.45f;
+    public const float SmallGapChance = 0.4f;      // whatever's left over = big gap
     public const float HardNoGapChance = 0.15f;
     public const float HardSmallGapChance = 0.32f;
     public const int SmallGapMin = 2;
@@ -155,8 +156,15 @@ public sealed class RooftopTrack
     /// </summary>
     public float Speed { get; private set; } = BaseSpeed;
 
-    /// <summary>Distance run in meters (1 tile = 1 meter)</summary>
-    public double DistanceMeters => (ScrollX + _distanceOffset) / TileSize;
+    /// <summary>
+    /// World units in a meter of distance run. Picked so running covers 100 m in about 12 seconds
+    /// (a fast human sprint) and swinging about twice as fast. Raise it to make the counter climb
+    /// slower; everything measured in meters (spawns, boards, difficulty) follows
+    /// </summary>
+    public const float UnitsPerMeter = 44f;
+
+    /// <summary>Distance run in meters (see <see cref="UnitsPerMeter"/>)</summary>
+    public double DistanceMeters => (ScrollX + _distanceOffset) / UnitsPerMeter;
 
     /// <summary>Set to false when the run ends so the city stops</summary>
     public bool IsScrolling { get; internal set; } = true;
@@ -291,8 +299,8 @@ public sealed class RooftopTrack
 
     private int PickGap()
     {
-        // harder further along (a column is one meter)
-        float d = HazardField.DifficultyAt(_nextColumn);
+        // harder further along
+        float d = HazardField.DifficultyAt(_nextColumn * (double)TileSize / UnitsPerMeter);
         float noGap = NoGapChance + (HardNoGapChance - NoGapChance) * d;
         float smallGap = SmallGapChance + (HardSmallGapChance - SmallGapChance) * d;
 

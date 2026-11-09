@@ -25,12 +25,50 @@ public sealed class HazardSprites
         Pylon = content.Load<Texture2D>("Textures/task_force_pylon");
         Pumpkin = content.Load<Texture2D>("Textures/pumpkin_bomb");
         SpiderSense = content.Load<Texture2D>("Textures/spider_sense");
+        BugleBoard = content.Load<Texture2D>("Textures/daily_bugle_board");
+
+        PylonSilhouette = Silhouette(Pylon);
+        PumpkinSilhouette = Silhouette(Pumpkin);
+    }
+
+    /// <summary>The pylon sheet in plain white (same frames), for the red "can't punch this" outline</summary>
+    public Texture2D PylonSilhouette { get; }
+
+    /// <summary>The pumpkin bomb in plain white, for the red "can't punch this" outline</summary>
+    public Texture2D PumpkinSilhouette { get; }
+
+    /// <summary>
+    /// A copy of a sprite with every pixel white, keeping its alpha, so it can be tinted any
+    /// color. Falls back to the sprite itself if it isn't in a format we can read.
+    /// </summary>
+    private static Texture2D Silhouette(Texture2D source)
+    {
+        if (source.Format != SurfaceFormat.Color)
+            return source;
+
+        var pixels = new Color[source.Width * source.Height];
+        source.GetData(pixels);
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            byte a = pixels[i].A;
+            pixels[i] = new Color(a, a, a, a); // premultiplied white
+        }
+
+        var silhouette = new Texture2D(source.GraphicsDevice, source.Width, source.Height);
+        silhouette.SetData(pixels);
+        return silhouette;
     }
 
     public Texture2D Soldier { get; }
     public Texture2D Pylon { get; }
     public Texture2D Pumpkin { get; }
     public Texture2D SpiderSense { get; }
+
+    /// <summary>
+    /// The Daily Bugle news board (Textures/daily_bugle_board): 50x60 frames, 2 across, 3 frames
+    /// of the lamp glinting. Not a hazard, but drawn by the same view (see WorldView.News.cs)
+    /// </summary>
+    public Texture2D BugleBoard { get; }
 
     // ---- soldier ----
 

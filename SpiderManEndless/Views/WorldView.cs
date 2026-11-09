@@ -45,6 +45,8 @@ public partial class WorldView : WorldLayer
     private const float PixelScale = RooftopTrack.TileSize / (float)Src;
 
     private static readonly Color RopeColor = new(235, 240, 245);
+    private static readonly Color BuildingOutline = new(8, 8, 14);
+    private static readonly Color RoofRim = new Color(255, 225, 200) * 0.45f;
     private static readonly Color NewBestColor = new(255, 220, 70);
     private static readonly Color SavedColor = new(150, 235, 160);
     private static readonly Color NotSavedColor = new(255, 140, 130);
@@ -54,7 +56,6 @@ public partial class WorldView : WorldLayer
     private static readonly Color AccentColor = new(232, 72, 60);
 
     // text sizes (scales of the game font), picked so everything is readable at 800x480
-    private const float HintScale = 0.5f;
     private const float TitleScale = 1.15f;
     private const float DistanceScale = 0.85f;
     private const float BestScale = 0.6f;
@@ -245,9 +246,10 @@ public partial class WorldView : WorldLayer
         var hazards = _session.World.Hazards;
 
         _backdrop?.Draw(SpriteBatch, track.ScrollX, track.DistanceMeters, left, right);
+        DrawNewsBoards(camera, track, runner, left, right, bottom);     // behind the roofs
         DrawBuildings(track, left, right, bottom);
         DrawDropShadows(hazards, track);
-        DrawHazards(hazards, track, left, right);
+        DrawHazards(camera, hazards, track, left, right);
         DrawEssence(camera, track, left, right);
         DrawHazardGlows(camera, hazards, track, left, right);
         DrawSpiderMan(track, runner);
@@ -356,7 +358,22 @@ public partial class WorldView : WorldLayer
                 var destination = new Rectangle((int)x0 + window.Column * size, window.Row * size, size * 2, size * 2);
                 SpriteBatch.Draw(_tileset, destination, WindowSource, Color.White);
             }
+
+            DrawBuildingOutline(x0, building.WidthTiles * size, building.TopRow * size, lastRow * size + size);
         }
+    }
+
+    /// <summary>
+    /// A heavy dark outline around the roof and walls of a building you can land on, with a pale
+    /// rim along the roof edge, so the roofs stand out from the city in the background
+    /// </summary>
+    private void DrawBuildingOutline(float x, float width, float roofY, float bottom)
+    {
+        const float thickness = 3;
+        Fill(new RectangleF(x - 1, roofY - 1, width + 2, thickness), BuildingOutline);              // roof
+        Fill(new RectangleF(x - 1, roofY - 1, thickness, bottom - roofY + 1), BuildingOutline);     // left wall
+        Fill(new RectangleF(x + width - 2, roofY - 1, thickness, bottom - roofY + 1), BuildingOutline); // right wall
+        Fill(new RectangleF(x + 2, roofY + 2, width - 4, 2), RoofRim);                              // lit roof edge
     }
 
     private void DrawLine(Vector2 from, Vector2 to, Color color, float width)
@@ -456,17 +473,6 @@ public partial class WorldView : WorldLayer
         DrawCombo(_session.World.Hazards);
         DrawPopups(track);
         DrawAdaptCallout();
-
-        // controls hint at the start of a run (two short lines, so it fits on screen)
-        if (runner.State != RunnerState.Dead && track.DistanceMeters < 80)
-        {
-            DrawCentered("Run into soldiers to take them out - jump over shields!", new Vector2(World.Width / 2, World.Height - 92),
-                Color.White, HintScale);
-            DrawCentered("SPACE / A: jump  (hold to jump higher)", new Vector2(World.Width / 2, World.Height - 62),
-                Color.White, HintScale);
-            DrawCentered("Keep holding in the air to web-swing", new Vector2(World.Width / 2, World.Height - 32),
-                Color.White, HintScale);
-        }
 
         _continueButton = null;
         _menuButton = null;

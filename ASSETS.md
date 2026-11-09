@@ -38,8 +38,8 @@ all related characters belong to Marvel. It's not for sale and isn't meant to be
   (generated with a script: red/blue suit colors remapped to black with silver highlights, silver
   lenses, motion trails turned silver, and a small white spider logo hand-placed on the chest of every
   frame the game draws). Same source/license as `spiderman.png`.
-- `Textures/suit_classic.png`, `Textures/suit_symbiote.png` - costume card artwork shown in the
-  Closet's Outfits screen, cropped and scaled down from reference images I supplied. Source: TODO.
+- `Textures/suit_classic.png` by Giuliano224 based on Amazing Spider-Man (Vol. 6) #42 Spider-Man Marvel Masterpieces III Variant by Greg Hildebrandt and Tim Hildebrandt https://www.reddit.com/r/Spiderman/comments/1mzz90i/ive_turned_this_cover_art_into_raimis_spiderman/, `Textures/suit_symbiote.png` by justartsketches on instagram https://www.instagram.com/p/CtCMsJsSWEL/ - costume card artwork shown in the
+  Closet's Outfits screen, cropped and scaled down from reference images I supplied from fan art pages.
 
 - `Textures/background.png` (submenu background) and `Textures/gradient.png` (message box fill) -
   procedurally generated placeholders that came with the starter project, public domain.
@@ -55,13 +55,16 @@ all related characters belong to Marvel. It's not for sale and isn't meant to be
 
 - `Textures/task_force_soldier.png` - the task force soldiers. Cut out of **Open Gunner Hero
   Version 2** by Master484 (credit and license are printed on the sheet), OpenGameArt:
-  (link: TODO). License: **CC-BY 3.0**,
+  (https://opengameart.org/content/open-gunner-starter-kit). License: **CC-BY 3.0**,
   so the credit has to stay. I removed the purple background and packed just the left-facing
   frames I use (run cycle, stand, duck, jump, hurt, aim up/down) into a 64x64 grid.
   Then darkened (`Textures/Originals/recolor_soldier.py`) so they still read red and blue like
   Spider-Man, but murkier and more military.
   The original sheet is kept unedited in `Textures/Originals/open_gunner_hero_v2.png` (not loaded).
-- `Textures/task_force_pylon.png`, `Textures/pumpkin_bomb.png`, `Textures/spider_sense.png` - the
+- `Textures/pumpkin_bomb.png` - by JoeEnderman of OpenGameArt using the Creative Commons license (https://opengameart.org/content/mini-pumpkin-16x-minecraft-style)
+`Textures/task_force_pylon.png` - Created by the developer 
+`Textures/spider_sense.png` - Created by the developer
+`Textures/daily_bugle_board.png` - the Daily Bugle news board (3 frames, the lamp glinting). Created by the developer
   task force pylon, pumpkin bomb and spider sense warning sprites. Source and license: TODO.
 - Bullets, drop shadows, jetpack flames, aim lasers, explosions and dust - drawn in code
   (`Views/WorldView.Hazards.cs`), no image files.

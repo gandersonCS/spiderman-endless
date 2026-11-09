@@ -103,6 +103,12 @@ public sealed class Enemy
     /// <summary>True once a shielded soldier has tingled a second time, when he got close</summary>
     internal bool SensedClose { get; set; }
 
+    /// <summary>True once he's gone by under you (a shielded soldier only counts as a close call once)</summary>
+    internal bool Passed { get; set; }
+
+    /// <summary>Closest a shielded soldier got to him, for close calls</summary>
+    internal float Closest { get; set; } = float.MaxValue;
+
     /// <summary>What touching a shielded soldier means touching: him and the shield held out in front</summary>
     public HitBox ShieldedBody => new(X - 30, Y - BodyHeight + 2, X + BodyHalfWidth - 5, Y);
 

@@ -43,5 +43,5 @@ public static class DefaultControls
     /// A gamepad
     /// </summary>
     public static ControlScheme GamePad() => StandardSchemes.GamePad()
-        .Bind(nameof(GameAction.Jump), Button(Buttons.A), new GamePadAxisBinding(GamePadAxis.LeftTrigger));
+        .Bind(nameof(GameAction.Jump), Button(Buttons.A), new GamePadAxisBinding(GamePadAxis.RightTrigger));
 }

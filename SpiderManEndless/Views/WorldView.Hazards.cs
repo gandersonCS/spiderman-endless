@@ -23,6 +23,9 @@ public partial class WorldView
     private static readonly Color JetColor = new(255, 150, 40);
     private static readonly Color BlastColor = new(255, 140, 30);
 
+    /// <summary>The outline around pylons and pumpkin bombs: red means don't touch, you can't punch it</summary>
+    private static readonly Color DangerOutline = new(255, 45, 45);
+
     /// <summary>Spider-Man's tint while he's invulnerable (after beating a soldier or a close call)</summary>
     private static readonly Color InvulnerableTint = new(140, 225, 255);
     private static readonly Color InvulnerableGlow = new(110, 210, 255);
@@ -75,10 +78,14 @@ public partial class WorldView
                 PickDeathLine();
                 break;
             case TaskForceAdapted adapted:
+                string more = adapted.Level > 1 ? "MORE " : "";
                 _adaptText = adapted.Focus == TaskForceFocus.Air
-                    ? "TASK FORCE: AIR UNITS INBOUND"
-                    : "TASK FORCE: GROUND UNITS INBOUND";
+                    ? $"TASK FORCE: {more}AIR UNITS INBOUND"
+                    : $"TASK FORCE: {more}GROUND UNITS INBOUND";
                 _adaptStart = _clock;
+                break;
+            case NewsBoardRaised raised:
+                PostBoard(raised.Board);
                 break;
             case NearMiss miss:
                 _popups.Add(new Popup($"CLOSE CALL! +{miss.Essence}", miss.X, miss.Y - 20, _clock, CloseCallColor));
@@ -132,10 +139,12 @@ public partial class WorldView
     }
 
     /// <summary>Pylons, pumpkin bombs and soldiers (pixel art batch)</summary>
-    private void DrawHazards(HazardField hazards, RooftopTrack track, float left, float right)
+    private void DrawHazards(Camera2D camera, HazardField hazards, RooftopTrack track, float left, float right)
     {
         if (_hazardSprites == null)
             return;
+
+        DrawDangerOutlines(camera, hazards, track, left, right);
 
         foreach (var pylon in hazards.Pylons)
         {
@@ -170,6 +179,56 @@ public partial class WorldView
                 continue;
             DrawEnemy(enemy, x);
         }
+    }
+
+    /// <summary>
+    /// A soft red glow traced around pylons and pumpkin bombs, so you can tell at a glance they
+    /// can't be punched (soldiers can). Their white silhouettes are added a couple of pixels off
+    /// in each direction, under the sprites, which then cover the middle
+    /// </summary>
+    private void DrawDangerOutlines(Camera2D camera, HazardField hazards, RooftopTrack track, float left, float right)
+    {
+        if (hazards.Pylons.Count == 0 && hazards.Pumpkins.Count == 0)
+            return;
+
+        Rebegin(camera, BlendState.Additive, SamplerState.PointClamp);
+        float pulse = 0.85f + 0.15f * MathF.Sin(_clock * 5);
+        var inner = DangerOutline * (0.55f * pulse);
+        var outer = DangerOutline * (0.18f * pulse);
+
+        void Outline(Texture2D texture, Vector2 at, Rectangle? source, float rotation, Vector2 origin, float scale)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = i * MathF.PI / 4;
+                var direction = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+                SpriteBatch.Draw(texture, at + direction * 4, source, outer, rotation, origin, scale, SpriteEffects.None, 0);
+                if (i % 2 == 0)
+                    SpriteBatch.Draw(texture, at + direction * 2, source, inner, rotation, origin, scale, SpriteEffects.None, 0);
+            }
+        }
+
+        foreach (var pylon in hazards.Pylons)
+        {
+            float x = (float)(pylon.X - track.ScrollX);
+            if (x < left - 40 || x > right + 40)
+                continue;
+            float rate = pylon.IsFalling ? 20 : 7;
+            int frame = (int)(pylon.Age * rate + pylon.X * 0.01) % HazardSprites.PylonFrames;
+            Outline(_hazardSprites.PylonSilhouette, new Vector2(MathF.Round(x), MathF.Round(pylon.Y)),
+                HazardSprites.PylonFrame(frame), 0, HazardSprites.PylonBottom, HazardSprites.PylonScale);
+        }
+
+        foreach (var bomb in hazards.Pumpkins)
+        {
+            float x = (float)(bomb.X - track.ScrollX);
+            if (x < left - 30 || x > right + 30)
+                continue;
+            Outline(_hazardSprites.PumpkinSilhouette, new Vector2(x, bomb.Y), null, -bomb.Age * 9,
+                HazardSprites.PumpkinCenter, HazardSprites.PumpkinScale);
+        }
+
+        Rebegin(camera, BlendState.AlphaBlend, SamplerState.PointClamp);
     }
 
     private void DrawEnemy(Enemy enemy, float x)
@@ -506,11 +565,11 @@ public partial class WorldView
         if (hazards.ComboMultiplier < 2 || hazards.ComboSecondsLeft <= 0)
             return;
 
-        float pop = 1 + 0.15f * MathF.Max(0, 1 - (HazardField.ComboWindowSeconds - hazards.ComboSecondsLeft) / 0.2f);
+        float pop = 1 + 0.15f * MathF.Max(0, 1 - (hazards.CurrentComboWindow - hazards.ComboSecondsLeft) / 0.2f);
         var position = new Vector2(16, 88);
         DrawOutlined($"x{hazards.ComboMultiplier} COMBO", position, Vector2.Zero, ComboColor, 0.5f * pop);
 
-        float left = hazards.ComboSecondsLeft / HazardField.ComboWindowSeconds;
+        float left = hazards.ComboSecondsLeft / hazards.CurrentComboWindow;
         var bar = new RectangleF(16, position.Y + _font.LineSpacing * 0.5f + 2, 110, 5);
         Fill(bar, Color.Black * 0.6f);
         Fill(new RectangleF(bar.X + 1, bar.Y + 1, (bar.Width - 2) * left, bar.Height - 2), ComboColor);
@@ -528,7 +587,8 @@ public partial class WorldView
 
         float alpha = t < 0.15f ? t / 0.15f : t > AdaptSeconds - 0.4f ? (AdaptSeconds - t) / 0.4f : 1f;
         bool flash = t < 0.6f && (int)(t * 12) % 2 == 0;
-        var at = new Vector2(World.Width / 2, 112);
+        // under the Daily Bugle board while one is up, so it doesn't cover it
+        var at = new Vector2(World.Width / 2, BoardShowing(_session.World.Track) ? BelowBoards : 112);
         Fill(new RectangleF(0, at.Y - 16, World.Width, 32), Color.Black * (0.45f * alpha));
         DrawCentered(_adaptText, at, (flash ? Color.White : AdaptColor) * alpha, 0.5f);
     }

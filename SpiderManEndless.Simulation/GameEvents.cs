@@ -140,8 +140,25 @@ public enum TaskForceFocus
     Ground,
 }
 
-/// <summary>The task force switched focus to match how he's playing (the view shows a callout)</summary>
-public sealed record TaskForceAdapted(long Tick, TaskForceFocus Focus) : GameEvent(Tick);
+/// <summary>
+/// The task force switched focus to match how he's playing, or (if <paramref name="Level"/> is
+/// above 1) is doubling down because he's still playing the same way. The view shows a callout
+/// </summary>
+public sealed record TaskForceAdapted(long Tick, TaskForceFocus Focus, int Level = 1) : GameEvent(Tick);
+
+/// <summary>The Daily Bugle boards that teach the game</summary>
+public enum NewsBoard
+{
+    /// <summary>The controls: jump, hold for higher, press again in the air to swing. At the very start</summary>
+    Controls,
+    /// <summary>Trust your spider sense. Early in the run, before anything dangerous shows up</summary>
+    SpiderSense,
+    /// <summary>Touch soldiers to take them down, dodge their shots. Right before the first normal soldier</summary>
+    Soldiers,
+}
+
+/// <summary>Time to put up a Daily Bugle board (the view decides where and how it's drawn)</summary>
+public sealed record NewsBoardRaised(long Tick, NewsBoard Board) : GameEvent(Tick);
 
 /// <summary>A pumpkin bomb finished its warning and launched along its line</summary>
 public sealed record PumpkinLaunched(long Tick, double X, float Y) : GameEvent(Tick);

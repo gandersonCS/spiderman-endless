@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using CIS580.Simulation;
 using SpiderManEndless.Simulation;
@@ -188,6 +189,60 @@ public class HazardFieldTests
         Assert.Equal(1, world.Hazards.NearMisses);
         int fromCloseCall = session.Events.Pending.OfType<EssenceCollected>().Count(e => e.Pack < 0);
         Assert.Equal(HazardField.NearMissEssence, fromCloseCall);
+    }
+
+    [Fact]
+    public void ACloseCall_AddsToTheCombo()
+    {
+        var (session, runner) = Start(_ => default);
+        Steps(runner, 3);
+        var world = session.World;
+        float overHisHead = world.Runner.FeetY - HazardField.RunnerHeight - 30;
+        world.Hazards.Add(new Bullet(world.Track.RunnerTrackX + 120, overHisHead, -400, 0));
+
+        for (int i = 0; i < 120 && !session.Events.Pending.Any(e => e is NearMiss); i++)
+            runner.Step();
+        Assert.Equal(1, world.Hazards.Combo);
+        Assert.True(world.Hazards.ComboSecondsLeft > 0);
+    }
+
+    [Fact]
+    public void TheComboTimer_GrowsExponentiallyWithEachStage_UpToACap()
+    {
+        Assert.Equal(HazardField.ComboWindowSeconds, HazardField.ComboWindowFor(1), 3);
+        float previous = HazardField.ComboWindowFor(1);
+        for (int stage = 2; stage <= 4; stage++)
+        {
+            float window = HazardField.ComboWindowFor(stage);
+            Assert.Equal(previous * HazardField.ComboWindowGrowth, window, 3);
+            previous = window;
+        }
+        Assert.Equal(HazardField.MaxComboWindowSeconds, HazardField.ComboWindowFor(20), 3);
+    }
+
+    [Fact]
+    public void ClearingAShieldedSoldierCloseUp_IsACloseCall()
+    {
+        // jump at him from different distances: a late jump that only just clears him should count
+        bool found = false;
+        for (int lead = 30; lead <= 200 && !found; lead += 10)
+        {
+            var (session, runner) = Start(tick => tick >= 3 ? Holding(GameAction.Jump) : default);
+            Steps(runner, 3);
+            var world = session.World;
+            double x = world.Track.RunnerTrackX + lead;
+            float? roof = world.Track.RoofAt(x);
+            if (roof == null)
+                continue;
+            world.Hazards.Add(new Enemy(world.Hazards.NextId(), EnemyKind.Rooftop, false, x, roof.Value, 0)
+            {
+                IsShielded = true,
+            });
+
+            Steps(runner, 60);
+            found = world.Runner.State != RunnerState.Dead && session.Events.Pending.Any(e => e is NearMiss);
+        }
+        Assert.True(found, "Only just clearing a shielded soldier should be a close call");
     }
 
     [Fact]
@@ -418,25 +473,49 @@ public class HazardFieldTests
         }
     }
 
-    [Fact]
-    public void SpendingTimeInTheAir_SpawnsMoreFlyers_AndOnTheRoofs_MoreRooftopThreats()
+    [Theory]
+    [InlineData(TaskForceFocus.Mixed, 0.5)]
+    [InlineData(TaskForceFocus.Air, 0.7)]
+    [InlineData(TaskForceFocus.Ground, 0.3)]
+    public void TheFocus_SplitsAirAndGroundUnits_AndEveryKindStillShowsUp(TaskForceFocus focus, double expectedAir)
     {
-        int Count(float airShare, HazardField.SpawnKind kind)
+        var hazards = new HazardField(new DeterministicRandom(5));
+        hazards.SetFocus(focus);
+        var counts = new Dictionary<HazardField.SpawnKind, int>();
+        const int picks = 4000;
+        for (int i = 0; i < picks; i++)
         {
-            var hazards = new HazardField(new DeterministicRandom(5));
-            hazards.SetAirShare(airShare);
-            int count = 0;
-            for (int i = 0; i < 2000; i++)
-            {
-                if (hazards.PickSpawn(0.5f) == kind)
-                    count++;
-            }
-            return count;
+            var kind = hazards.PickSpawn(0.5f);
+            counts[kind] = counts.GetValueOrDefault(kind) + 1;
         }
 
-        Assert.True(Count(1, HazardField.SpawnKind.Flyer) > 2 * Count(0, HazardField.SpawnKind.Flyer));
-        Assert.True(Count(0, HazardField.SpawnKind.RooftopSoldier) > 2 * Count(1, HazardField.SpawnKind.RooftopSoldier));
-        Assert.True(Count(0, HazardField.SpawnKind.GroundPylon) > 2 * Count(1, HazardField.SpawnKind.GroundPylon));
+        double air = counts.Where(c => HazardField.IsAirUnit(c.Key)).Sum(c => c.Value) / (double)picks;
+        Assert.InRange(air, expectedAir - 0.04, expectedAir + 0.04);
+        foreach (var kind in Enum.GetValues<HazardField.SpawnKind>())
+            Assert.True(counts.GetValueOrDefault(kind) > picks * 0.04, $"{kind}: {counts.GetValueOrDefault(kind)} of {picks}");
+    }
+
+    [Fact]
+    public void TheTaskForce_StaysMixed_ForTheFirst500Meters()
+    {
+        var track = new RooftopTrack(new DeterministicRandom(4));
+        var hazards = new HazardField(new DeterministicRandom(5)) { StartMeters = 0 };
+        var events = new EventQueue<GameEvent>();
+        long tick = 0;
+        while (track.DistanceMeters < HazardField.MixedUntilMeters - 1)
+        {
+            track.Advance(1 / 60f);
+            hazards.SetAirShare(1f);
+            hazards.UpdateFocus(track, events, tick++);
+            Assert.Equal(TaskForceFocus.Mixed, hazards.Focus);
+        }
+        while (track.DistanceMeters < HazardField.MixedUntilMeters + 2)
+        {
+            track.Advance(1 / 60f);
+            hazards.SetAirShare(1f);
+            hazards.UpdateFocus(track, events, tick++);
+        }
+        Assert.Equal(TaskForceFocus.Air, hazards.Focus);
     }
 
     [Fact]
@@ -701,6 +780,7 @@ public class HazardFieldTests
         Steps(runner, 3);
         var world = session.World;
         world.Hazards.StartMeters = 0;
+        world.Hazards.FocusStartMeters = 0;
         world.Hazards.SetAirShare(1f);
 
         runner.Step();
@@ -712,7 +792,7 @@ public class HazardFieldTests
     public void EvenInTheAir_RooftopSoldiersStillShowUp()
     {
         var hazards = new HazardField(new DeterministicRandom(9));
-        hazards.SetAirShare(1f);
+        hazards.SetFocus(TaskForceFocus.Air);
         int rooftop = 0;
         for (int i = 0; i < 2000; i++)
         {
@@ -747,5 +827,98 @@ public class HazardFieldTests
         Steps(runner, 2);
         Assert.True(world.Hazards.SpiderSenseActive);
         Assert.Single(session.Events.Pending.OfType<SpiderSenseTriggered>(), e => e.Kind == ThreatKind.ShieldedSoldier);
+    }
+
+    // ---- Daily Bugle boards and the task force doubling down ----
+
+    [Fact]
+    public void TheControlsBoard_GoesUpRightAway()
+    {
+        var (session, runner) = Start(_ => default);
+        runner.Step();
+        Assert.Contains(session.Events.Pending, e => e is NewsBoardRaised { Board: NewsBoard.Controls });
+    }
+
+    /// <summary>
+    /// Runs the hazards on their own against a scrolling track (he stands still and never falls),
+    /// for at most this many ticks or until <paramref name="stop"/> says so
+    /// </summary>
+    private static (HazardField hazards, EventQueue<GameEvent> events, Runner runner, RooftopTrack track) RunHazards(
+        ulong seed, int maxTicks, Func<HazardField, EventQueue<GameEvent>, bool> stop, double startMeters = HazardField.GraceMeters)
+    {
+        var track = new RooftopTrack(new DeterministicRandom(seed));
+        var runner = new Runner(track);
+        var essence = new EssenceField(new DeterministicRandom(seed + 100));
+        var hazards = new HazardField(new DeterministicRandom(seed + 200)) { StartMeters = startMeters };
+        var events = new EventQueue<GameEvent>();
+        long tick = 0;
+        for (; tick < maxTicks && runner.State != RunnerState.Dead && !stop(hazards, events); tick++)
+        {
+            track.Advance(1 / 60f);
+            hazards.Update(track, runner, essence, events, tick, 1 / 60f);
+        }
+        return (hazards, events, runner, track);
+    }
+
+    [Fact]
+    public void TheSpiderSenseBoard_GoesUpBeforeTheGraceDistanceEnds()
+    {
+        var (_, events, _, _) = RunHazards(3, 60 * 30,
+            (_, ev) => ev.Pending.Any(e => e is NewsBoardRaised { Board: NewsBoard.SpiderSense }), startMeters: double.MaxValue);
+        Assert.Contains(events.Pending, e => e is NewsBoardRaised { Board: NewsBoard.SpiderSense });
+        Assert.True(HazardField.SpiderSenseBoardMeters < HazardField.GraceMeters);
+    }
+
+    [Fact]
+    public void TheBoards_ComeOneEvery100Meters_ThenTheFirstSpawnIsANormalSoldier()
+    {
+        for (ulong seed = 1; seed <= 10; seed++)
+        {
+            var (hazards, events, _, track) = RunHazards(seed, 60 * 120,
+                (h, _) => h.Enemies.Count > 0 || h.Pylons.Count > 0 || h.Pumpkins.Count > 0);
+
+            var boards = events.Pending.OfType<NewsBoardRaised>().Select(e => e.Board).ToArray();
+            Assert.Equal(new[] { NewsBoard.Controls, NewsBoard.SpiderSense, NewsBoard.Soldiers }, boards);
+
+            // nothing before the grace distance, and the first thing is a normal soldier
+            Assert.True(track.DistanceMeters >= HazardField.GraceMeters, $"seed {seed}: spawned at {track.DistanceMeters:0} m");
+            Assert.Empty(hazards.Pylons);
+            Assert.Empty(hazards.Pumpkins);
+            var first = Assert.Single(hazards.Enemies);
+            Assert.Equal(EnemyKind.Rooftop, first.Kind);
+            Assert.False(first.IsShielded, $"seed {seed}: the first soldier was shielded");
+        }
+    }
+
+    [Fact]
+    public void PlayingTheSameWay_MakesTheTaskForceDoubleDown_AndItSwitchesBack()
+    {
+        var track = new RooftopTrack(new DeterministicRandom(4));
+        var hazards = new HazardField(new DeterministicRandom(5)) { StartMeters = 0, FocusStartMeters = 0 };
+        var events = new EventQueue<GameEvent>();
+        long tick = 0;
+        void RunMeters(double meters, float airShare)
+        {
+            double end = track.DistanceMeters + meters;
+            while (track.DistanceMeters < end)
+            {
+                track.Advance(1 / 60f);
+                hazards.SetAirShare(airShare);
+                hazards.UpdateFocus(track, events, tick++);
+            }
+        }
+
+        // swinging the whole time: announced, then doubled down once he's kept at it long enough
+        RunMeters(1, 1f);
+        RunMeters(HazardField.FocusRepeatMeters + 5, 1f);
+        var air = events.Pending.OfType<TaskForceAdapted>().ToList();
+        Assert.Equal(new[] { 1, 2 }, air.Select(a => a.Level));
+        Assert.All(air, a => Assert.Equal(TaskForceFocus.Air, a.Focus));
+
+        // back on the roofs: it switches to ground units, starting over at level 1
+        RunMeters(1, 0f);
+        Assert.Equal(TaskForceFocus.Ground, hazards.Focus);
+        var last = events.Pending.OfType<TaskForceAdapted>().Last();
+        Assert.Equal((TaskForceFocus.Ground, 1), (last.Focus, last.Level));
     }
 }

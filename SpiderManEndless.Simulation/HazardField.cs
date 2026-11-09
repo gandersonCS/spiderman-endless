@@ -25,8 +25,11 @@ namespace SpiderManEndless.Simulation;
 /// <para>
 /// Difficulty (<see cref="Difficulty"/>, 0 to 1) climbs with distance: faster bullets, flyers and
 /// falling things, more spawns, more pumpkin bombs, and more essence for beating soldiers.
-/// The director also adapts to how he plays (<see cref="AirShare"/>): the more time in the air,
-/// the more flyers (at his height); the more time on roofs, the more rooftop soldiers and pylons.
+/// The director also adapts to how he plays (<see cref="AirShare"/>). Every kind of threat
+/// always shows up, but after <see cref="FocusStartMeters"/> the split between air units (flyers,
+/// pumpkin bombs, falling pylons) and ground units (rooftop soldiers, shielded or not, and pylons
+/// on the roofs) goes 70/30 toward whichever way he plays: swinging = air, jumping roof to roof =
+/// ground. Before that it's 50/50.
 /// </para>
 /// <para>
 /// Fairness: nothing for the first <see cref="GraceMeters"/>, at most <see cref="MaxThreats"/>
@@ -50,10 +53,14 @@ public sealed class HazardField
     // ---- difficulty ----
 
     /// <summary>Nothing spawns until he's run this far (the controls hint is still up)</summary>
-    public const double GraceMeters = 80;
+    public const double GraceMeters = 300;
 
-    /// <summary>Meters after the grace distance it takes to reach full difficulty</summary>
-    public const double RampMeters = 1400;
+    /// <summary>
+    /// Meters after the grace distance it takes to reach full difficulty. The climb is eased in
+    /// (see <see cref="DifficultyAt"/>): slow for a long while, steeper later, so the first
+    /// minutes are about learning and flow, and the challenge builds as you get good
+    /// </summary>
+    public const double RampMeters = 1500;
 
     // seconds between spawns at cruising speed, at the easiest and hardest. Going faster than
     // cruising speed (swinging) makes spawns come faster too, so they keep up with him
@@ -71,11 +78,11 @@ public sealed class HazardField
     // ---- soldiers ----
 
     /// <summary>Chance a soldier is a shooter, at the easiest and hardest</summary>
-    public const float EasyShooterChance = 0.2f;
+    public const float EasyShooterChance = 0.1f;
     public const float HardShooterChance = 0.75f;
 
     /// <summary>Chance a rooftop soldier has a riot shield, at the easiest and hardest</summary>
-    public const float EasyShieldChance = 0.2f;
+    public const float EasyShieldChance = 0.1f;
     public const float HardShieldChance = 0.4f;
 
     /// <summary>How long a shooter aims before firing (the spider sense warning), easiest and hardest</summary>
@@ -172,7 +179,7 @@ public sealed class HazardField
     /// </summary>
     public const float PylonDropBeyondScreen = 500f;
 
-    /// <summary>Falling pylons start showing up at this difficulty (about 120 m in)</summary>
+    /// <summary>Falling pylons start showing up at this difficulty (about 560 m in)</summary>
     public const float FallingPylonStartDifficulty = 0.03f;
 
     /// <summary>Pylons only go on roofs at least this wide</summary>
@@ -212,7 +219,7 @@ public sealed class HazardField
     /// <summary>How much they bob up and down as they float</summary>
     public const float PumpkinBob = 7f;
 
-    /// <summary>Pumpkin bombs start showing up at this difficulty (about 190 m in)</summary>
+    /// <summary>Pumpkin bombs start showing up at this difficulty (about 720 m in)</summary>
     public const float PumpkinStartDifficulty = 0.08f;
 
     /// <summary>
@@ -241,8 +248,24 @@ public sealed class HazardField
 
     // ---- rewards ----
 
-    /// <summary>Beating another soldier within this long keeps the combo going</summary>
+    /// <summary>
+    /// Time to keep the combo going at the first stage. Beating a soldier or pulling off a close
+    /// call within this long keeps it going
+    /// </summary>
     public const float ComboWindowSeconds = 3.5f;
+
+    /// <summary>Each stage of the combo gives this many times longer than the last to keep it going</summary>
+    public const float ComboWindowGrowth = 1.3f;
+
+    /// <summary>The longest the combo timer gets, however long the combo</summary>
+    public const float MaxComboWindowSeconds = 9f;
+
+    /// <summary>
+    /// How long you get to keep a combo of <paramref name="combo"/> going. Grows exponentially
+    /// with each stage (3.5s, 4.6s, 5.9s, 7.7s, then 9s from there on)
+    /// </summary>
+    public static float ComboWindowFor(int combo)
+        => MathF.Min(MaxComboWindowSeconds, ComboWindowSeconds * MathF.Pow(ComboWindowGrowth, Math.Max(0, combo - 1)));
 
     /// <summary>The combo multiplies the essence a soldier drops, up to this</summary>
     public const int MaxComboMultiplier = 5;
@@ -327,10 +350,14 @@ public sealed class HazardField
     public int MaxThreats => MaxThreatsAt(_difficulty);
 
     /// <summary>
-    /// How much he's been in the air lately: 0 = always on the roofs, 1 = always jumping/swinging.
-    /// Steers what spawns
+    /// How much he's been swinging lately (on a web, or flying off one until he lands): 0 = only
+    /// running and jumping roof to roof, 1 = swinging all the time. Jumps don't count as air.
+    /// Decides the task force's <see cref="Focus"/>
     /// </summary>
     public float AirShare { get; private set; }
+
+    /// <summary>On a web, or still flying from one (a plain jump doesn't count)</summary>
+    private bool _swingFlight;
 
     /// <summary>Soldiers beaten this run</summary>
     public int Defeated { get; private set; }
@@ -341,16 +368,57 @@ public sealed class HazardField
     /// </summary>
     public TaskForceFocus Focus { get; private set; } = TaskForceFocus.Mixed;
 
-    /// <summary>He's in the air this much of the time (or less, for the roofs) before the task force switches</summary>
-    public const float AirFocusShare = 0.65f;
-    public const float GroundFocusShare = 0.3f;
+    /// <summary>He's swinging this much of the time (or this little, for the roofs) before the task force switches</summary>
+    public const float AirFocusShare = 0.45f;
+    public const float GroundFocusShare = 0.2f;
+
+    /// <summary>Once the task force has a focus, this share of spawns are that kind of unit (the rest are the other kind)</summary>
+    public const float FocusedShare = 0.7f;
+
+    /// <summary>The task force stays mixed (50/50 air and ground) until this far in</summary>
+    public const double MixedUntilMeters = 500;
+
+    /// <summary>Where the task force can start adapting. Normally <see cref="MixedUntilMeters"/>; tests turn it down</summary>
+    internal double FocusStartMeters { get; set; } = MixedUntilMeters;
+
+    /// <summary>Chance the next spawn is an air unit (flyer, pumpkin bomb, falling pylon), from the focus</summary>
+    public float AirUnitChance => Focus switch
+    {
+        TaskForceFocus.Air => FocusedShare,
+        TaskForceFocus.Ground => 1 - FocusedShare,
+        _ => 0.5f,
+    };
 
     /// <summary>
-    /// When the task force switches focus, the next few spawns come quickly and match it, so the
-    /// switch is felt right away
+    /// If he keeps playing the same way this far after the last announcement, the task force
+    /// doubles down: announces again (one level up) and sends another surge
     /// </summary>
-    public const int FocusSurgeSpawns = 3;
-    private int _surgeLeft;
+    public const double FocusRepeatMeters = 250;
+
+    private double _focusAnnouncedMeters;
+    private int _focusLevel;
+
+    // ---- Daily Bugle boards (the tutorial) ----
+
+    // One board every 100 m, all before anything spawns: the controls at the start, the spider
+    // sense at 100 m, and how to beat soldiers at 200 m, right before the first one (at 300 m)
+
+    /// <summary>The "trust your spider sense" board goes up this far in</summary>
+    public const double SpiderSenseBoardMeters = 100;
+
+    /// <summary>The "how to beat soldiers" board goes up this far in (the first soldier comes at <see cref="GraceMeters"/>)</summary>
+    public const double SoldierBoardMeters = 200;
+
+    private bool _controlsBoardShown;
+    private bool _senseBoardShown;
+    private bool _soldierBoardShown;
+
+    /// <summary>
+    /// False until the first spawn of the run, which is always a normal (unshielded) rooftop
+    /// soldier, the one the soldier board just explained
+    /// </summary>
+    private bool _firstSpawnDone;
+
 
     /// <summary>Tests can turn off the hold-fire-before-an-edge rule</summary>
     internal bool HoldFireBeforeEdges { get; set; } = true;
@@ -380,6 +448,9 @@ public sealed class HazardField
     /// <summary>Time left to beat another soldier and keep the combo going</summary>
     public float ComboSecondsLeft { get; private set; }
 
+    /// <summary>The whole timer for the current stage of the combo (for the bar under the counter)</summary>
+    public float CurrentComboWindow => ComboWindowFor(Combo);
+
     /// <summary>What the combo multiplies essence by (1 to <see cref="MaxComboMultiplier"/>)</summary>
     public int ComboMultiplier => Math.Clamp(Combo, 1, MaxComboMultiplier);
 
@@ -403,7 +474,13 @@ public sealed class HazardField
 
     /// <summary>Works out the difficulty for a distance</summary>
     public static float DifficultyAt(double meters)
-        => (float)Math.Clamp((meters - GraceMeters) / RampMeters, 0, 1);
+    {
+        // eased in (squared): a quarter of the way through the ramp it's only 1/16 as hard as it
+        // gets, halfway it's a quarter. Like most endless runners, it stays friendly long enough
+        // to learn, then keeps climbing
+        double t = Math.Clamp((meters - GraceMeters) / RampMeters, 0, 1);
+        return (float)(t * t);
+    }
 
     private static float Lerp(float easy, float hard, float t) => easy + (hard - easy) * t;
 
@@ -435,6 +512,7 @@ public sealed class HazardField
         {
             Adapt(runner, dt);
             UpdateFocus(track, events, tick);
+            UpdateTutorialBoards(track, events, tick);
         }
 
         if (alive && track.IsScrolling && track.DistanceMeters >= StartMeters)
@@ -484,7 +562,7 @@ public sealed class HazardField
         SpiderSenseSeconds = 0;
         KilledBy = null;
         _groundedSeconds = 10f;
-        _surgeLeft = 0;
+        _swingFlight = false;
         UpdatePlatforms(track);
     }
 
@@ -495,13 +573,19 @@ public sealed class HazardField
     internal void Add(PumpkinBomb bomb) => _pumpkins.Add(bomb);
     internal int NextId() => _nextId++;
     internal void SetAirShare(float share) => AirShare = share;
+    internal void SetFocus(TaskForceFocus focus) => Focus = focus;
 
     /// <summary>Tracks how much he's in the air and how high, so the spawns can match how he plays</summary>
     private void Adapt(Runner runner, float dt)
     {
         _groundedSeconds = runner.State == RunnerState.Running ? _groundedSeconds + dt : 0;
 
-        float inAir = runner.State == RunnerState.Running ? 0 : 1;
+        // swinging, and the flight off the end of a swing, count as air. Jumping doesn't
+        if (runner.State == RunnerState.Swinging)
+            _swingFlight = true;
+        else if (runner.State != RunnerState.Airborne)
+            _swingFlight = false;
+        float inAir = _swingFlight ? 1 : 0;
         AirShare += (inAir - AirShare) * (1 - MathF.Exp(-dt / AdaptSeconds));
 
         if (!_hasAverageFeetY)
@@ -512,24 +596,60 @@ public sealed class HazardField
         _averageFeetY += (runner.FeetY - _averageFeetY) * (1 - MathF.Exp(-dt / HeightAverageSeconds));
     }
 
-    /// <summary>Switches the task force's focus when he clearly changes how he plays</summary>
-    private void UpdateFocus(RooftopTrack track, EventQueue<GameEvent> events, long tick)
+    /// <summary>
+    /// Switches the task force's focus when he clearly changes how he plays (air or roofs), and
+    /// doubles down every <see cref="FocusRepeatMeters"/> while he clearly keeps playing that way.
+    /// It switches as many times as he changes style, in either direction
+    /// </summary>
+    internal void UpdateFocus(RooftopTrack track, EventQueue<GameEvent> events, long tick)     // internal for tests
     {
-        if (track.DistanceMeters < StartMeters)
+        if (track.DistanceMeters < Math.Max(StartMeters, FocusStartMeters))
             return;
 
-        var focus = Focus;
+        // only a clear preference counts. In between, the task force stays as it is
+        TaskForceFocus favored;
         if (AirShare >= AirFocusShare)
-            focus = TaskForceFocus.Air;
+            favored = TaskForceFocus.Air;
         else if (AirShare <= GroundFocusShare)
-            focus = TaskForceFocus.Ground;
-        if (focus == Focus)
+            favored = TaskForceFocus.Ground;
+        else
             return;
 
-        Focus = focus;
-        _surgeLeft = FocusSurgeSpawns;
-        _spawnIn = MathF.Min(_spawnIn, 0.6f);
-        events.Raise(new TaskForceAdapted(tick, focus));
+        if (favored != Focus)
+            _focusLevel = 1;                    // switched (from mixed, or from the other one)
+        else if (track.DistanceMeters - _focusAnnouncedMeters >= FocusRepeatMeters)
+            _focusLevel++;                      // same style for a while: double down
+        else
+            return;
+
+        Focus = favored;
+        _focusAnnouncedMeters = track.DistanceMeters;
+        events.Raise(new TaskForceAdapted(tick, favored, _focusLevel));
+    }
+
+    /// <summary>
+    /// The teaching boards, one every 100 m before anything spawns. Each shows once a run; a
+    /// continue doesn't show them again
+    /// </summary>
+    private void UpdateTutorialBoards(RooftopTrack track, EventQueue<GameEvent> events, long tick)
+    {
+        if (!_controlsBoardShown)
+        {
+            _controlsBoardShown = true;
+            events.Raise(new NewsBoardRaised(tick, NewsBoard.Controls));
+        }
+
+        if (!_senseBoardShown && track.DistanceMeters >= SpiderSenseBoardMeters)
+        {
+            _senseBoardShown = true;
+            events.Raise(new NewsBoardRaised(tick, NewsBoard.SpiderSense));
+        }
+
+        if (!_soldierBoardShown && track.DistanceMeters >= SoldierBoardMeters)
+        {
+            _soldierBoardShown = true;
+            events.Raise(new NewsBoardRaised(tick, NewsBoard.Soldiers));
+        }
     }
 
     /// <summary>The landed pylons' tops are solid, like roofs</summary>
@@ -559,7 +679,11 @@ public sealed class HazardField
             return;
 
         float d = _difficulty;
-        var kind = _surgeLeft > 0 ? PickSurgeSpawn(d) : PickSpawn(d);
+
+        // the first thing of the run is always a normal soldier on a roof (what the last board
+        // was about). After that, the director picks
+        var kind = !_firstSpawnDone ? SpawnKind.RooftopSoldier : PickSpawn(d);
+
         bool spawned = kind switch
         {
             SpawnKind.RooftopSoldier => TrySpawnRooftopSoldier(track, d),
@@ -572,39 +696,33 @@ public sealed class HazardField
 
         // didn't fit anywhere fair (no roof, too crowded, too many threats): try again shortly.
         // a surge comes quicker
-        if (spawned && _surgeLeft > 0)
-            _surgeLeft--;
+        if (spawned)
+            _firstSpawnDone = true;
         float gap = Lerp(EasySpawnSeconds, HardSpawnSeconds, d) * _random.NextFloat(0.75f, 1.25f);
-        _spawnIn = !spawned ? 0.2f : _surgeLeft > 0 ? gap * 0.45f : gap;
+        _spawnIn = !spawned ? 0.2f : gap;
     }
 
-    /// <summary>Right after the task force switches focus: units that match it</summary>
-    private SpawnKind PickSurgeSpawn(float d)
-    {
-        if (Focus == TaskForceFocus.Air)
-        {
-            bool bombsReady = PumpkinBombsEnabled && d >= PumpkinStartDifficulty;
-            return bombsReady && _random.Chance(0.35f) ? SpawnKind.PumpkinBomb : SpawnKind.Flyer;
-        }
-        if (Focus == TaskForceFocus.Ground)
-            return _random.Chance(0.6f) ? SpawnKind.RooftopSoldier : SpawnKind.GroundPylon;
-        return PickSpawn(d);
-    }
 
     internal SpawnKind PickSpawn(float d)
     {
-        // what spawns follows how he plays: in the air a lot = flyers, on the roofs = rooftop
-        // soldiers and pylons. bombs come either way (they come at whatever height he's at), more
-        // later in the run. the falling pylons and bombs ease in after a bit
-        float air = AirShare, ground = 1 - AirShare;
+        // first: air unit or ground unit, split by the task force's focus (70/30 one way or the
+        // other, 50/50 before it adapts). Every kind can still show up either way
+        bool air = _random.NextFloat() < AirUnitChance;
         Span<float> weights = stackalloc float[5];
-        // there's always a solid share of rooftop stuff (that's where he lands, and where combos
-        // start); how he plays tilts the mix
-        weights[(int)SpawnKind.RooftopSoldier] = 2f + 2.5f * ground;
-        weights[(int)SpawnKind.Flyer] = (0.8f + 2.2f * air) * (1 + 0.5f * d);
-        weights[(int)SpawnKind.GroundPylon] = 0.8f + 1.5f * ground;
-        weights[(int)SpawnKind.FallingPylon] = d < FallingPylonStartDifficulty ? 0 : (0.8f + 1.2f * ground) * (1 + d);
-        weights[(int)SpawnKind.PumpkinBomb] = !PumpkinBombsEnabled || d < PumpkinStartDifficulty ? 0 : (0.2f + 2.2f * air) * (1 + d);
+        if (air)
+        {
+            // air units: flyers, pumpkin bombs, falling pylons (the last two ease in after a bit;
+            // until then every air unit is a flyer)
+            weights[(int)SpawnKind.Flyer] = 2f;
+            weights[(int)SpawnKind.FallingPylon] = d < FallingPylonStartDifficulty ? 0 : 1f + d;
+            weights[(int)SpawnKind.PumpkinBomb] = !PumpkinBombsEnabled || d < PumpkinStartDifficulty ? 0 : 1f + d;
+        }
+        else
+        {
+            // ground units: soldiers on the roofs (some shielded) and pylons on the roofs
+            weights[(int)SpawnKind.RooftopSoldier] = 2.5f;
+            weights[(int)SpawnKind.GroundPylon] = 1.2f;
+        }
 
         float total = 0;
         foreach (float w in weights)
@@ -617,8 +735,11 @@ public sealed class HazardField
             if (roll < 0)
                 return (SpawnKind)i;
         }
-        return SpawnKind.RooftopSoldier;
+        return air ? SpawnKind.Flyer : SpawnKind.RooftopSoldier;
     }
+
+    /// <summary>True for the kinds that are air units (flyers, pumpkin bombs, falling pylons)</summary>
+    internal static bool IsAirUnit(SpawnKind kind) => kind is SpawnKind.Flyer or SpawnKind.PumpkinBomb or SpawnKind.FallingPylon;
 
     /// <summary>Track x just off the right side of the screen</summary>
     private static double SpawnX(RooftopTrack track) => track.ScrollX + World.Width + SpawnAhead;
@@ -630,7 +751,8 @@ public sealed class HazardField
 
         // shielded soldiers hold their ground and never shoot; of the rest, shooters hold their
         // ground and the others run at you
-        bool shielded = _random.Chance(Lerp(EasyShieldChance, HardShieldChance, d));
+        // (always roll, so the random numbers line up the same either way)
+        bool shielded = _random.Chance(Lerp(EasyShieldChance, HardShieldChance, d)) && _firstSpawnDone;
         bool shooter = !shielded && _random.Chance(Lerp(EasyShooterChance, HardShooterChance, d));
         float speed = shooter || shielded ? 0 : Lerp(EasyRunnerSpeed, HardRunnerSpeed, d) * _random.NextFloat(0.7f, 1.1f);
         var enemy = new Enemy(_nextId++, EnemyKind.Rooftop, shooter, x, roof, speed)
@@ -914,10 +1036,27 @@ public sealed class HazardField
                     events.Raise(new SpiderSenseTriggered(tick, ThreatKind.ShieldedSoldier));
                 }
 
-                if (!IsInvulnerable && LethalBox(track, runner).Overlaps(enemy.ShieldedBody))
+                var lethal = LethalBox(track, runner);
+                var shield = enemy.ShieldedBody;
+                if (!IsInvulnerable && lethal.Overlaps(shield))
                 {
                     Kill(track, runner, RunEndReason.Tackled, enemy.X, enemy.Y - Enemy.BodyHeight / 2);
                     alive = false;
+                    continue;
+                }
+
+                // clearing him with not much room to spare is a close call
+                if (!enemy.Passed)
+                {
+                    if (shield.Right < lethal.Left)
+                    {
+                        enemy.Passed = true;
+                        CloseCall(enemy.Closest, enemy.X, shield.Top, track, runner, essence, events, tick);
+                    }
+                    else if (lethal.Right > shield.Left - NearMissDistance)
+                    {
+                        enemy.Closest = MathF.Min(enemy.Closest, lethal.DistanceTo(shield));
+                    }
                 }
                 continue;
             }
@@ -1115,8 +1254,7 @@ public sealed class HazardField
         enemy.KnockVY = MathF.Sin(angle) * speed;
         enemy.SpinSpeed = _random.NextFloat(8f, 16f) * (_random.Chance(0.5f) ? 1 : -1);
 
-        Combo = ComboSecondsLeft > 0 ? Combo + 1 : 1;
-        ComboSecondsLeft = ComboWindowSeconds;
+        AddToCombo();
         Defeated++;
         InvulnerableSeconds = MathF.Max(InvulnerableSeconds, DefeatInvulnerableSeconds);
 
@@ -1128,6 +1266,13 @@ public sealed class HazardField
         var center = enemy.Body;
         events.Raise(new EnemyDefeated(tick, enemy.X, (center.Top + center.Bottom) / 2, enemy.Kind, enemy.IsShooter,
             Combo, ComboMultiplier));
+    }
+
+    /// <summary>Another hit (a soldier beaten or a close call): the combo goes up and its timer restarts</summary>
+    private void AddToCombo()
+    {
+        Combo = ComboSecondsLeft > 0 ? Combo + 1 : 1;
+        ComboSecondsLeft = ComboWindowFor(Combo);
     }
 
     /// <summary>A knocked-back soldier bursts into essence that flies to Spider-Man</summary>
@@ -1316,7 +1461,10 @@ public sealed class HazardField
 
         NearMisses++;
         InvulnerableSeconds = MathF.Max(InvulnerableSeconds, CloseCallInvulnerableSeconds);
-        int value = NearMissEssence + (int)MathF.Round(NearMissEssence * _difficulty);
+
+        // close calls count toward the combo too, and get multiplied by it like soldiers do
+        AddToCombo();
+        int value = (NearMissEssence + (int)MathF.Round(NearMissEssence * _difficulty)) * ComboMultiplier;
         essence.SpawnBurst(x, y, value, _random);
         events.Raise(new NearMiss(tick, track.RunnerTrackX, runner.FeetY - RunnerHeight, value));
     }

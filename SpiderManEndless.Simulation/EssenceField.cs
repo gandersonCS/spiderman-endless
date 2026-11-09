@@ -239,8 +239,8 @@ public sealed class EssenceField
 
     private void AddPack(RooftopTrack track)
     {
-        // further along = bigger packs, closer together (a tile is a meter)
-        float d = HazardField.DifficultyAt(_nextPackX / RooftopTrack.TileSize);
+        // further along = bigger packs, closer together
+        float d = HazardField.DifficultyAt(_nextPackX / RooftopTrack.UnitsPerMeter);
         int maxSize = (int)MathF.Round(EasyMaxPackSize + (MaxPackSize - EasyMaxPackSize) * d);
         int count = _random.NextInt(MinPackSize, maxSize + 1);
         var shape = _random.Chance(CircleChance) ? EssencePackShape.Circle : EssencePackShape.Line;
