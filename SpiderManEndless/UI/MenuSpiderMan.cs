@@ -50,6 +50,9 @@ public sealed class MenuSpiderMan
     public bool IsFighting => !ReferenceEquals(_clip, Idle);
 
     /// <summary>Which frame to draw right now</summary>
+    /// <summary>True while a jab, kick or uppercut is playing (not idling or landing)</summary>
+    public bool IsAttacking => Array.IndexOf(Fights, _clip) >= 0;
+
     public SpiderFrames.Frame CurrentFrame
     {
         get

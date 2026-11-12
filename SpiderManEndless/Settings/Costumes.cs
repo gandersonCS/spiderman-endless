@@ -13,7 +13,11 @@ namespace SpiderManEndless.Settings;
 /// <param name="Price">Spider-Essence it costs (0 = free and always owned)</param>
 /// <param name="SpriteSheet">Content name of the recolored sprite sheet</param>
 /// <param name="Portrait">Content name of the art shown on the card</param>
-public sealed record Costume(string Id, string Name, string FirstAppearance, int Price, string SpriteSheet, string Portrait)
+/// <param name="AttackOverlay">
+/// Optional sheet drawn behind him while he attacks, e.g. Iron Spider's spider arms (see SpiderArms)
+/// </param>
+public sealed record Costume(string Id, string Name, string FirstAppearance, int Price, string SpriteSheet, string Portrait,
+    string AttackOverlay = null)
 {
     public bool IsFree => Price <= 0;
 }
@@ -30,10 +34,15 @@ public static class Costumes
         "Textures/spiderman", "Textures/suit_classic");
 
     public static readonly Costume Symbiote = new(
-        "symbiote", "Symbiote Suit", "The Amazing Spider-Man #252 (1984)", 1000,
+        "symbiote", "Symbiote Suit", "Spider-Man 3 Directed By Sam Raimi #252 (2007)", 2000,
         "Textures/spiderman_symbiote", "Textures/suit_symbiote");
 
-    public static IReadOnlyList<Costume> All { get; } = new[] { Classic, Symbiote };
+    public static readonly Costume IronSpider = new(
+        "iron_spider", "Iron Spider Suit", "The Amazing Spider-Man #529 (2006)", 2500,
+        "Textures/spiderman_ironspider", "Textures/suit_ironspider",
+        AttackOverlay: "Textures/spiderman_ironspider_arms");    // gold spider arms pop out when he attacks
+
+    public static IReadOnlyList<Costume> All { get; } = new[] { Classic, Symbiote, IronSpider };
 
     /// <summary>The costume with this id, or null if there isn't one</summary>
     public static Costume Find(string id)

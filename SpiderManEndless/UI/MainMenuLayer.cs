@@ -105,6 +105,7 @@ public class MainMenuLayer : MenuLayer
     private readonly float[] _fade;
     private Texture2D _skyline;
     private Texture2D _spidey;
+    private Texture2D _attackOverlay;    // e.g. Iron Spider's spider arms, null for most suits
     private SaveFile _save;
     private Costume _costume;
     private SpriteFont _buttonFont;
@@ -181,6 +182,7 @@ public class MainMenuLayer : MenuLayer
     {
         _costume = Costumes.Equipped(_save);
         _spidey = Game.Content.Load<Texture2D>(_costume.SpriteSheet);
+        _attackOverlay = _costume.AttackOverlay != null ? Game.Content.Load<Texture2D>(_costume.AttackOverlay) : null;
     }
 
     /// <summary>
@@ -424,6 +426,11 @@ public class MainMenuLayer : MenuLayer
         var shadowSize = new Vector2(30 * scale, 3 * scale);
         Fill(new RectangleF(feet.X - shadowSize.X / 2, feet.Y - shadowSize.Y / 2, shadowSize.X, shadowSize.Y),
             Color.Black * (0.35f * alpha));
+
+        // suit extras that come out when he attacks, drawn behind him
+        if (_attackOverlay != null && _spiderMan.IsAttacking && SpiderArms.TryGetCell(frame, out var armSource, out var armOrigin))
+            SpriteBatch.Draw(_attackOverlay, feet, armSource, Color.White * alpha, 0, armOrigin, scale,
+                SpriteEffects.None, 0);
 
         SpriteBatch.Draw(_spidey, feet, frame.Source, Color.White * alpha, 0, frame.Origin, scale,
             SpriteEffects.None, 0);

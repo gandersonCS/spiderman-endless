@@ -114,7 +114,7 @@ public class ClosetLayer : MenuLayer
         float buttonTop = panel.Y + panel.Height + 14;
         float buttonWidth = (PanelWidth - ShopButtonGap) / 2;
         var outfitsButton = new RectangleF(panel.X, buttonTop, buttonWidth, ShopButtonHeight);
-        var powerupsButton = new RectangleF(panel.X + buttonWidth + ShopButtonGap, buttonTop, buttonWidth, ShopButtonHeight);
+        // var powerupsButton = new RectangleF(panel.X + buttonWidth + ShopButtonGap, buttonTop, buttonWidth, ShopButtonHeight);
         float noteTop = buttonTop + ShopButtonHeight + 12;
         float backTop = MathF.Max(noteTop + 34, viewport.Height - 70);
 
@@ -133,7 +133,7 @@ public class ClosetLayer : MenuLayer
 
         Menu.ClearItemBounds();
         DrawShopButton(OutfitsIndex, outfitsButton, alpha);
-        DrawShopButton(PowerupsIndex, powerupsButton, alpha);
+        // DrawShopButton(PowerupsIndex, powerupsButton, alpha);
 
         var font = Theme.TextFont;
         var noteSize = font.MeasureString(ComingSoon) * 0.6f;

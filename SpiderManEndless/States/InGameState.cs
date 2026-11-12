@@ -37,6 +37,7 @@ public sealed class InGameState : AppState, ILoadable
     private Texture2D _tileset;
     private CityBackdrop _backdrop;
     private Texture2D _spidey;
+    private Texture2D _attackOverlay;    // e.g. Iron Spider's spider arms, null for most suits
     private HazardSprites _hazardSprites;
     private WorldView _worldView;
     private HudLayer _hud;
@@ -100,7 +101,9 @@ public sealed class InGameState : AppState, ILoadable
         _tileset = _content.Load<Texture2D>("Textures/tileset_city_free");
         _backdrop = new CityBackdrop(_content);
         // whichever suit is equipped in the Closet (all suits share the same frame layout)
-        _spidey = _content.Load<Texture2D>(Costumes.Equipped(services.GetService<SaveFile>()).SpriteSheet);
+        var costume = Costumes.Equipped(services.GetService<SaveFile>());
+        _spidey = _content.Load<Texture2D>(costume.SpriteSheet);
+        _attackOverlay = costume.AttackOverlay != null ? _content.Load<Texture2D>(costume.AttackOverlay) : null;
         _hazardSprites = new HazardSprites(_content);
         yield return 0.5f;
 
@@ -132,7 +135,7 @@ public sealed class InGameState : AppState, ILoadable
         _worldView = Show(new WorldView(Session, _gameFont, _tileset, _backdrop, _spidey, _save,
             canContinue: () => Session.World.CanContinue && CanAffordContinue(),
             buttonsActive: () => IsTop && _continuePrompt == null,
-            hazardSprites: _hazardSprites));
+            hazardSprites: _hazardSprites, attackOverlay: _attackOverlay));
         _hud = Show(new HudLayer(_players,
             showPause: () => Session.World.Runner.State != RunnerState.Dead,
             buttonsActive: () => IsTop));

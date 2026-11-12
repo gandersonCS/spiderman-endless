@@ -61,13 +61,24 @@ only for this class project. It isn't for sale and isn't meant to be published o
   (generated with a script: red/blue suit colors remapped to black with silver highlights, silver
   lenses, motion trails turned silver, and a small white spider logo hand-placed on the chest of every
   frame the game draws). Same source as `spiderman.png`.
+- `Textures/spiderman_ironspider.png` - Iron Spider Suit costume. A recolor of `spiderman.png` built
+  from my red-and-gold palette and hand-painted example frame by
+  `Textures/Originals/recolor_ironspider.py`: one red suit, gold eyes, a gold spider emblem whose top
+  legs form the shoulder pads (placed per frame along his torso, on his chest or back depending on
+  which side faces us; see `ironspider_emblems.json`), and gold gauntlets and boot tops. Same source
+  as `spiderman.png`.
+- `Textures/spiderman_ironspider_arms.png` - Iron Spider's gold spider arms, drawn behind him on the
+  attack frames (one padded cell per frame, see `Views/SpiderArms.cs`). Made by
+  `Textures/Originals/ironspider_arms.py`.
 
-- `Textures/suit_classic.png` and `Textures/suit_symbiote.png` - costume card artwork shown in the
+- `Textures/suit_classic.png`, `Textures/suit_symbiote.png` and `Textures/suit_ironspider.png` - costume card artwork shown in the
   Closet's Outfits screen, cropped and scaled down from fan art:
   - `suit_classic.png` by Giuliano224, based on the *Amazing Spider-Man* (Vol. 6) #42 Marvel
     Masterpieces III variant cover by Greg Hildebrandt and Tim Hildebrandt:
     <https://www.reddit.com/r/Spiderman/comments/1mzz90i/ive_turned_this_cover_art_into_raimis_spiderman/>
   - `suit_symbiote.png` by justartsketches: <https://www.instagram.com/p/CtCMsJsSWEL/>
+  - `suit_ironspider.png` - Iron Spider fan art (artist's signature in the bottom-left corner of the
+    original). Source: TODO.
   Used without permission for this class project only.
 
 - `Textures/task_force_soldier.png` - the task force soldiers. Cut out of **Open Gunner Hero

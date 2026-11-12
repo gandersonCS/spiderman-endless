@@ -89,6 +89,7 @@ public partial class WorldView : WorldLayer
     private readonly Texture2D _tileset;
     private readonly CityBackdrop _backdrop;
     private readonly Texture2D _spidey;
+    private readonly Texture2D _attackOverlay;
     private readonly SaveFile _save;
     private readonly HazardSprites _hazardSprites;
     private readonly Func<bool> _canContinue;
@@ -111,10 +112,12 @@ public partial class WorldView : WorldLayer
     /// <param name="canContinue">Whether the player can continue right now (has continues left and can pay)</param>
     /// <param name="buttonsActive">Whether the end screen's buttons can be clicked right now (e.g. not while paused)</param>
     /// <param name="hazardSprites">Sprites for the soldiers, pylons, pumpkin bombs and spider sense (hazards aren't drawn without them)</param>
+    /// <param name="attackOverlay">The equipped suit's attack overlay (e.g. Iron Spider's spider arms), drawn behind him while he attacks</param>
     public WorldView(GameSession session, SpriteFont font, Texture2D tileset, CityBackdrop backdrop, Texture2D spidey,
         SaveFile save = null, Func<bool> canContinue = null, Func<bool> buttonsActive = null,
-        HazardSprites hazardSprites = null)
+        HazardSprites hazardSprites = null, Texture2D attackOverlay = null)
     {
+        _attackOverlay = attackOverlay;
         _hazardSprites = hazardSprites;
         _canContinue = canContinue ?? (() => session.World.CanContinue);
         _buttonsActive = buttonsActive ?? (() => true);
@@ -393,7 +396,7 @@ public partial class WorldView : WorldLayer
         // since the web still gets drawn)
         if (runner.IsAttacking && runner.State is RunnerState.Running or RunnerState.Airborne)
         {
-            DrawFrame(SpiderFrames.AttackFrame(runner.Attack, runner.AttackSeconds), feet);
+            DrawAttack(SpiderFrames.AttackFrame(runner.Attack, runner.AttackSeconds), feet);
             return;
         }
 
@@ -436,7 +439,7 @@ public partial class WorldView : WorldLayer
                 DrawLine(hand, tip, Color.Black * 0.35f, 5);
                 DrawLine(hand, tip, RopeColor, 2.5f);
                 if (runner.IsAttacking)
-                    DrawFrame(SpiderFrames.AttackFrame(runner.Attack, runner.AttackSeconds), feet);
+                    DrawAttack(SpiderFrames.AttackFrame(runner.Attack, runner.AttackSeconds), feet);
                 else
                     DrawFrame(SpiderFrames.SwingFor(runner.RopeAngleDegrees(track)), hand);
                 break;
@@ -446,6 +449,15 @@ public partial class WorldView : WorldLayer
                 DrawFrame(SpiderFrames.Dead, feet);
                 break;
         }
+    }
+
+    /// <summary>An attack frame, with the suit's attack overlay (spider arms) behind him if it has one</summary>
+    private void DrawAttack(SpiderFrames.Frame frame, Vector2 position)
+    {
+        if (_attackOverlay != null && SpiderArms.TryGetCell(frame, out var armSource, out var armOrigin))
+            SpriteBatch.Draw(_attackOverlay, position, armSource, _spideyTint, 0, armOrigin,
+                PixelScale, SpriteEffects.None, 0);
+        DrawFrame(frame, position);
     }
 
     private void DrawFrame(SpiderFrames.Frame frame, Vector2 position, float rotation = 0)
